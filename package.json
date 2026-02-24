@@ -2,6 +2,7 @@
   "name": "qmeter",
   "version": "0.1.0",
   "description": "QMeter - unified usage and reset monitor",
+  "author": "cloim",
   "type": "module",
   "bin": {
     "qmeter": "dist/cli.js"
@@ -38,7 +39,7 @@
       "buildResources": "resources"
     },
     "win": {
-      "icon": "resources/QMeter.ico",
+      "icon": "resources/QMeter.png",
       "target": [
         "nsis",
         "portable"
