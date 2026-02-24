@@ -1,4 +1,6 @@
 import { app, BrowserWindow, ipcMain, Menu, Notification, Tray, nativeImage, screen } from "electron";
+import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,10 +10,44 @@ import { loadNotificationState, saveNotificationState } from "./notificationStor
 import { loadTraySettings, saveTraySettings, type TraySettings } from "./settings.js";
 import type { NormalizedSnapshot, ProviderId } from "../types.js";
 
+const require = createRequire(import.meta.url);
+const { autoUpdater } = require("electron-updater") as typeof import("electron-updater");
+
 let tray: Tray | null = null;
 let win: BrowserWindow | null = null;
 let timer: NodeJS.Timeout | null = null;
+let updaterTimer: NodeJS.Timeout | null = null;
+let manualUpdateCheck = false;
 let currentSettings: TraySettings | null = null;
+let cachedDisplayVersion: string | null = null;
+
+function getDisplayVersion(): string {
+  if (cachedDisplayVersion) return cachedDisplayVersion;
+
+  const envVersion = process.env.npm_package_version?.trim();
+  if (envVersion) {
+    cachedDisplayVersion = envVersion;
+    return cachedDisplayVersion;
+  }
+
+  const runtimeVersion = app.getVersion();
+  if (!app.isPackaged && runtimeVersion === process.versions.electron) {
+    try {
+      const pkgPath = path.join(process.cwd(), "package.json");
+      const raw = readFileSync(pkgPath, "utf8");
+      const parsed = JSON.parse(raw) as { version?: unknown };
+      if (typeof parsed.version === "string" && parsed.version.trim().length > 0) {
+        cachedDisplayVersion = parsed.version.trim();
+        return cachedDisplayVersion;
+      }
+    } catch (err) {
+      console.warn("[version] failed to read package.json version", err);
+    }
+  }
+
+  cachedDisplayVersion = runtimeVersion;
+  return cachedDisplayVersion;
+}
 
 let currentSnapshot: NormalizedSnapshot = {
   fetchedAt: new Date().toISOString(),
@@ -109,6 +145,89 @@ function makeIcon() {
   return fallback.resize({ width: 20, height: 20 });
 }
 
+function notify(title: string, body: string): void {
+  new Notification({ title, body }).show();
+}
+
+async function checkForUpdates(manual = false): Promise<void> {
+  if (!app.isPackaged) {
+    if (manual) {
+      notify("QMeter", "업데이트 확인은 설치된 앱에서만 동작합니다.");
+    }
+    return;
+  }
+
+  try {
+    if (manual) {
+      manualUpdateCheck = true;
+      notify("QMeter", "업데이트 확인 중...");
+    }
+    console.info("[updater] checking for updates", { manual });
+    await autoUpdater.checkForUpdates();
+  } catch (err) {
+    console.warn("[updater] check failed", err);
+    manualUpdateCheck = false;
+    if (manual) {
+      const msg = err instanceof Error ? err.message : String(err);
+      notify("QMeter 업데이트 확인 실패", msg);
+    }
+  }
+}
+
+function setupAutoUpdater(): void {
+  if (!app.isPackaged) return;
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on("checking-for-update", () => {
+    console.info("[updater] checking-for-update");
+  });
+
+  autoUpdater.on("update-available", (info: { version?: string }) => {
+    console.info("[updater] update-available", info);
+    if (manualUpdateCheck) {
+      notify("QMeter 업데이트", `새 버전(${info.version})을 다운로드합니다.`);
+    }
+  });
+
+  autoUpdater.on("download-progress", (progress: { percent?: number }) => {
+    if (!manualUpdateCheck) return;
+    if (typeof progress.percent === "number") {
+      console.info("[updater] download-progress", Math.round(progress.percent));
+    }
+  });
+
+  autoUpdater.on("update-not-available", (info: { version?: string }) => {
+    console.info("[updater] update-not-available", info);
+    if (manualUpdateCheck) {
+      notify("QMeter", "현재 최신 버전을 사용 중입니다.");
+    }
+    manualUpdateCheck = false;
+  });
+
+  autoUpdater.on("update-downloaded", (info: { version?: string }) => {
+    console.info("[updater] update-downloaded", info);
+    notify("QMeter 업데이트 준비 완료", `새 버전(${info.version})이 준비되었습니다. 앱 종료 시 적용됩니다.`);
+    manualUpdateCheck = false;
+  });
+
+  autoUpdater.on("error", (err) => {
+    console.warn("[updater] error", err);
+    if (manualUpdateCheck) {
+      const msg = err instanceof Error ? err.message : String(err);
+      notify("QMeter 업데이트 확인 실패", msg);
+    }
+    manualUpdateCheck = false;
+  });
+
+  void checkForUpdates(false);
+  if (updaterTimer) clearInterval(updaterTimer);
+  updaterTimer = setInterval(() => {
+    void checkForUpdates(false);
+  }, 6 * 60 * 60 * 1000);
+}
+
 function usagePercentLabel(snapshot: NormalizedSnapshot): string {
   const rows = snapshot.rows.filter((r) => r.usedPercent != null);
   if (rows.length === 0) return "QMeter";
@@ -153,9 +272,11 @@ function renderHtml(_snapshot: NormalizedSnapshot): string {
   const qmeterLogo = loadPngDataUrl("QMeter.png");
   const claudeLogo = loadPngDataUrl("Claude.png");
   const codexLogo = loadPngDataUrl("Codex.png");
+  const version = getDisplayVersion();
 
   return `<!doctype html>
 <html><head><meta charset="utf-8" />
+<title>QMeter v${version}</title>
 <style>
   html,body{margin:0;padding:0;overflow:hidden;background:#05070A;color:#fff;font-family:"Segoe UI",sans-serif}
   body{box-sizing:border-box;width:100%;height:100vh;background:radial-gradient(600px 360px at 50% 10%,rgba(79,70,229,.18),transparent 60%),#05070A}
@@ -232,7 +353,7 @@ function renderHtml(_snapshot: NormalizedSnapshot): string {
   <div class="panel" id="panel">
     <div class="header">
       <div>
-        <div class="title">${qmeterLogo ? `<img class="titleLogo" src="${qmeterLogo}" alt="QMeter" />` : ""}QMeter</div>
+        <div class="title">${qmeterLogo ? `<img class="titleLogo" src="${qmeterLogo}" alt="QMeter" />` : ""}QMeter <span style="font-size:12px;color:#9ca3af;font-weight:700">v${version}</span></div>
         <div class="sub">마지막 확인: <span class="mono" id="lastChecked">-</span></div>
       </div>
       <div class="btnRow">
@@ -572,8 +693,10 @@ function positionWindow() {
 
 function createWindow() {
   const preloadPath = fileURLToPath(new URL("./preload.js", import.meta.url));
+  const version = getDisplayVersion();
 
   win = new BrowserWindow({
+    title: `QMeter v${version}`,
     width: 560,
     height: 380,
     show: false,
@@ -607,6 +730,12 @@ function createTray() {
       label: "Refresh",
       click: async () => {
         await refreshSnapshot(true);
+      },
+    },
+    {
+      label: "Check for Updates",
+      click: async () => {
+        await checkForUpdates(true);
       },
     },
     { type: "separator" },
@@ -671,6 +800,7 @@ async function boot() {
   registerIpc();
   createWindow();
   createTray();
+  setupAutoUpdater();
 
   await refreshSnapshot(true);
   resetRefreshTimer(currentSettings.refreshIntervalMs);
@@ -696,5 +826,7 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   if (timer) clearInterval(timer);
+  if (updaterTimer) clearInterval(updaterTimer);
   timer = null;
+  updaterTimer = null;
 });

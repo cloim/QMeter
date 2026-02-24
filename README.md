@@ -139,6 +139,31 @@ npm run tray:pack
 
 Artifacts are generated under electron-builder output directories (per `dist`/`release` settings), not under runtime `dist` assets only.
 
+## Auto Update
+
+- Works only in packaged app builds (not in local dev run).
+- App performs background update checks on startup.
+- Tray menu includes `Check for Updates` for manual checks.
+- Manual check notifications show explicit statuses: checking, update available/downloading, up-to-date, and error.
+- After download finishes, update is applied when the app exits.
+
+## GitHub Release Automation
+
+- Workflow: `.github/workflows/release.yml`
+- Trigger: push tag matching `v*` (example: `v0.1.1`)
+- Pipeline:
+  1. `npm ci`
+  2. `npm run typecheck`
+  3. `npm test`
+  4. `npm run tray:pack` (electron-builder publishes via GitHub provider)
+
+Tag release example:
+
+```bash
+git tag v0.1.1
+git push origin v0.1.1
+```
+
 ## Troubleshooting
 
 - Codex launch failure (e.g. `spawn EINVAL`)

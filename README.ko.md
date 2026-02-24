@@ -139,6 +139,31 @@ npm run tray:pack
 
 산출물은 `dist` 하위가 아니라 electron-builder 기본 경로(`dist`/`release` 설정에 따름)로 생성됩니다.
 
+## 자동 업데이트
+
+- 설치된 패키지 앱에서만 동작합니다(로컬 개발 실행 제외).
+- 앱 시작 시 백그라운드로 업데이트를 확인합니다.
+- 트레이 메뉴에 `Check for Updates`가 있어 수동 확인이 가능합니다.
+- 수동 확인 시 상태 알림이 명확히 표시됩니다: 확인 중, 업데이트 있음/다운로드, 최신 버전, 실패.
+- 다운로드 완료 후 앱을 종료하면 새 버전이 적용됩니다.
+
+## GitHub 릴리즈 자동화
+
+- 워크플로우: `.github/workflows/release.yml`
+- 트리거: `v*` 형식 태그 push (예: `v0.1.1`)
+- 파이프라인:
+  1. `npm ci`
+  2. `npm run typecheck`
+  3. `npm test`
+  4. `npm run tray:pack` (electron-builder GitHub provider로 배포)
+
+태그 릴리즈 예시:
+
+```bash
+git tag v0.1.1
+git push origin v0.1.1
+```
+
 ## 트러블슈팅
 
 - Codex 실행 실패(`spawn EINVAL` 등)

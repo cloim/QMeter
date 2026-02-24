@@ -25,6 +25,13 @@
   "build": {
     "appId": "com.qmeter.app",
     "productName": "QMeter",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "cloim",
+        "repo": "QMeter"
+      }
+    ],
     "files": [
       "dist/**/*",
       "package.json"
@@ -56,6 +63,7 @@
   },
   "dependencies": {
     "node-pty": "^1.1.0",
+    "electron-updater": "^6.3.9",
     "zod": "^4.3.6"
   },
   "devDependencies": {
