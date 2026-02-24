@@ -2,7 +2,7 @@
 
 QMeter는 Claude Code/ Codex 사용량과 초기화 시간을 한눈에 확인하는 Windows 트레이 앱 + CLI입니다.
 
-![QMeter Screenshot](./Screenshot.png)
+![QMeter Screenshot](https://raw.githubusercontent.com/cloim/QMeter/main/Screenshot.png)
 
 ## 주요 기능
 
