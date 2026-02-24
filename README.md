@@ -1,38 +1,40 @@
 # QMeter
 
-QMeter는 Claude Code/ Codex 사용량과 초기화 시간을 한눈에 확인하는 Windows 트레이 앱 + CLI입니다.
+English | [한국어](./README.ko.md)
+
+QMeter is a Windows tray app + CLI that lets you check Claude Code/Codex usage and reset timing at a glance.
 
 ![QMeter Screenshot](./Screenshot.png)
 
-## 주요 기능
+## Key Features
 
-- Claude / Codex 사용량 통합 조회
-- 트레이 팝업 UI (카드 기반)
-- JSON 출력 CLI (`qmeter --json`)
-- 캐시/부분 실패 처리
-- 환경설정
-  - 새로고침 주기 변경
-  - 표시 카드(Claude/Codex) on/off
+- Unified usage view for Claude and Codex
+- Tray popup UI (card-based)
+- JSON output CLI (`qmeter --json`)
+- Cache and partial-failure handling
+- Settings
+  - Refresh interval
+  - Card visibility (Claude/Codex)
 
-## 요구사항
+## Requirements
 
 - Node.js 20+
-- Windows 11 (트레이 앱 기준)
+- Windows 11 (for tray app)
 
-## 설치
+## Installation
 
 ```bash
 npm install
 ```
 
-## 설치본 사용자용 CLI 빠른 시작
+## CLI Quick Start for Installer Users
 
-Windows 설치 파일(NSIS/Portable)로 설치하면 트레이 앱은 바로 사용할 수 있지만,
-`qmeter` CLI 명령이 PATH에 자동 등록되지는 않습니다.
+If you install QMeter via Windows installer (NSIS/Portable), the tray app is available right away,
+but the `qmeter` CLI command is not automatically added to PATH.
 
-CLI를 사용하려면 Node.js 환경에서 아래 방식 중 하나를 사용하세요.
+To use CLI, use one of the following from a Node.js environment.
 
-1) 빌드 후 직접 실행
+1) Build and run directly
 
 ```bash
 npm run build
@@ -40,7 +42,7 @@ node dist/cli.js --help
 node dist/cli.js --json
 ```
 
-2) 전역 링크 후 `qmeter` 명령 사용
+2) Link globally and use `qmeter`
 
 ```bash
 npm link
@@ -48,99 +50,99 @@ qmeter --help
 qmeter --json
 ```
 
-자주 쓰는 옵션
+Common options
 
-- `--json`: JSON 형식 출력
-- `--refresh`: 캐시 무시 후 새로 조회
-- `--debug`: 디버그 정보 출력(민감정보 제외)
-- `--view table|graph`: 출력 형식 선택
-- `--providers claude,codex,all`: 조회 provider 선택
+- `--json`: Print JSON output
+- `--refresh`: Bypass cache and refresh data
+- `--debug`: Print debug diagnostics (no secrets)
+- `--view table|graph`: Select output mode
+- `--providers claude,codex,all`: Select providers
 
-## 개발/실행
+## Development / Run
 
-### 타입체크
+### Typecheck
 
 ```bash
 npm run typecheck
 ```
 
-### 테스트
+### Test
 
 ```bash
 npm test
 ```
 
-### 빌드
+### Build
 
 ```bash
 npm run build
 ```
 
-### CLI 실행
+### Run CLI
 
 ```bash
 node dist/cli.js --json
 ```
 
-또는 전역 링크:
+Or global link:
 
 ```bash
 npm link
 qmeter --json
 ```
 
-### 트레이 앱 실행
+### Run Tray App
 
 ```bash
 npm run tray:start
 ```
 
-### 트레이 스모크 테스트
+### Tray Smoke Test
 
 ```bash
 npm run tray:smoke
 ```
 
-## 환경설정
+## Settings
 
-트레이 UI의 설정 버튼(톱니)에서 아래 항목을 설정할 수 있습니다.
+You can configure the following in the tray UI settings (gear icon):
 
-- 새로고침 주기
-- 표시할 카드(Claude/Codex)
+- Refresh interval
+- Visible cards (Claude/Codex)
 
-설정은 로컬 사용자 설정 폴더에 저장됩니다.
+Settings are saved in the local user settings directory.
 
-## 리소스 파일
+## Resource Files
 
-`resources` 폴더의 리소스를 사용합니다.
+QMeter uses files in the `resources` folder.
 
 - `resources/QMeter.ico`
 - `resources/QMeter.png`
 - `resources/Claude.png`
 - `resources/Codex.png`
 
-빌드 시 `scripts/copy-resources.mjs`로 `dist/resources`에 자동 복사됩니다.
+During build, `scripts/copy-resources.mjs` copies them into `dist/resources` automatically.
 
-## 패키징(배포본)
+## Packaging (Distributables)
 
-### 디렉터리 아웃풋
+### Directory Output
 
 ```bash
 npm run tray:pack:dir
 ```
 
-### Windows 설치본(NSIS + Portable)
+### Windows Installer (NSIS + Portable)
 
 ```bash
 npm run tray:pack
 ```
 
-산출물은 `dist` 하위가 아니라 electron-builder 기본 경로(`dist`/`release` 설정에 따름)로 생성됩니다.
+Artifacts are generated under electron-builder output directories (per `dist`/`release` settings), not under runtime `dist` assets only.
 
-## 트러블슈팅
+## Troubleshooting
 
-- Codex 실행 실패(`spawn EINVAL` 등)
-  - Windows 셸/경로 이슈일 수 있습니다.
-  - Codex 설치/로그인 상태 확인 후 재실행하세요.
-- 카드가 보이지 않음
-  - 해당 provider가 설치/인증되지 않았거나, 설정에서 OFF일 수 있습니다.
+- Codex launch failure (e.g. `spawn EINVAL`)
+  - This can be a Windows shell/path issue.
+  - Verify Codex installation/login status, then retry.
+- Card not visible
+  - The provider may be missing/not authenticated, or disabled in settings.
