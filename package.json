@@ -1,0 +1,69 @@
+{
+  "name": "qmeter",
+  "version": "0.1.0",
+  "description": "QMeter - unified usage and reset monitor",
+  "type": "module",
+  "bin": {
+    "qmeter": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "dist/tray/main.js",
+  "scripts": {
+    "build": "tsup && node scripts/copy-resources.mjs",
+    "dev": "tsx src/cli.ts",
+    "tray:smoke": "tsx src/tray/smoke.ts",
+    "tray:start": "electron dist/tray/main.js",
+    "tray:pack": "npm run build && electron-builder --win nsis portable",
+    "tray:pack:dir": "npm run build && electron-builder --dir",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "build": {
+    "appId": "com.qmeter.app",
+    "productName": "QMeter",
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources"
+      }
+    ],
+    "directories": {
+      "buildResources": "resources"
+    },
+    "win": {
+      "icon": "resources/QMeter.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "node-pty": "^1.1.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.0",
+    "electron": "^38.0.0",
+    "electron-builder": "^24.13.3",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}
