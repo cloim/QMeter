@@ -21,7 +21,6 @@ pnpm-debug.log*
 Thumbs.db
 
 # local artifacts
-Screenshot.png
 *.psd
 
 # local tool state
