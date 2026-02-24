@@ -152,10 +152,12 @@ npm run tray:pack
 - 워크플로우: `.github/workflows/release.yml`
 - 트리거: `v*` 형식 태그 push (예: `v0.1.1`)
 - 파이프라인:
-  1. `npm ci`
-  2. `npm run typecheck`
-  3. `npm test`
-  4. `npm run tray:pack` (electron-builder GitHub provider로 배포)
+  1. 태그 형식 검증 (`vMAJOR.MINOR.PATCH`)
+  2. push된 태그 기준으로 `package.json` 버전 동기화
+  3. `npm ci`
+  4. `npm run typecheck`
+  5. `npm test`
+  6. `npm run tray:pack` (electron-builder GitHub provider로 배포)
 
 태그 릴리즈 예시:
 

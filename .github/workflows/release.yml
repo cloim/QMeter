@@ -21,6 +21,21 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Validate release tag format
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -notmatch '^v\d+\.\d+\.\d+([-.][0-9A-Za-z.-]+)?$') {
+            Write-Error "Tag '$tag' is not a valid release tag (expected vMAJOR.MINOR.PATCH)."
+            exit 1
+          }
+
+      - name: Sync package version from tag
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag.TrimStart('v')
+          node -e "const fs=require('fs'); const p='package.json'; const j=JSON.parse(fs.readFileSync(p,'utf8')); j.version=process.argv[1]; fs.writeFileSync(p, JSON.stringify(j, null, 2) + '\n');" $version
+          Write-Host "Updated package.json version to $version"
+
       - name: Install dependencies
         run: npm ci
 

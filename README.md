@@ -152,10 +152,12 @@ Artifacts are generated under electron-builder output directories (per `dist`/`r
 - Workflow: `.github/workflows/release.yml`
 - Trigger: push tag matching `v*` (example: `v0.1.1`)
 - Pipeline:
-  1. `npm ci`
-  2. `npm run typecheck`
-  3. `npm test`
-  4. `npm run tray:pack` (electron-builder publishes via GitHub provider)
+  1. Validate tag format (`vMAJOR.MINOR.PATCH`)
+  2. Sync `package.json` version from the pushed tag
+  3. `npm ci`
+  4. `npm run typecheck`
+  5. `npm test`
+  6. `npm run tray:pack` (electron-builder publishes via GitHub provider)
 
 Tag release example:
 
