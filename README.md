@@ -23,6 +23,37 @@ QMeter는 Claude Code/ Codex 사용량과 초기화 시간을 한눈에 확인�
 npm install
 ```
 
+## 설치본 사용자용 CLI 빠른 시작
+
+Windows 설치 파일(NSIS/Portable)로 설치하면 트레이 앱은 바로 사용할 수 있지만,
+`qmeter` CLI 명령이 PATH에 자동 등록되지는 않습니다.
+
+CLI를 사용하려면 Node.js 환경에서 아래 방식 중 하나를 사용하세요.
+
+1) 빌드 후 직접 실행
+
+```bash
+npm run build
+node dist/cli.js --help
+node dist/cli.js --json
+```
+
+2) 전역 링크 후 `qmeter` 명령 사용
+
+```bash
+npm link
+qmeter --help
+qmeter --json
+```
+
+자주 쓰는 옵션
+
+- `--json`: JSON 형식 출력
+- `--refresh`: 캐시 무시 후 새로 조회
+- `--debug`: 디버그 정보 출력(민감정보 제외)
+- `--view table|graph`: 출력 형식 선택
+- `--providers claude,codex,all`: 조회 provider 선택
+
 ## 개발/실행
 
 ### 타입체크
