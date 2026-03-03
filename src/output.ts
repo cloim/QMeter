@@ -14,10 +14,23 @@ function clampText(s: string, width: number): string {
 function renderErrors(snapshot: NormalizedSnapshot): string[] {
   if (snapshot.errors.length === 0) return [];
 
+  const providersWithCacheFallback = new Set(
+    snapshot.rows
+      .filter((r) => r.source === "cache" || r.stale)
+      .map((r) => r.provider)
+  );
+
+  const filtered = snapshot.errors.filter((e) => {
+    if (!providersWithCacheFallback.has(e.provider)) return true;
+    return !(e.type === "timeout" || e.type === "acquire-failed");
+  });
+
+  if (filtered.length === 0) return [];
+
   const lines: string[] = [];
   lines.push("");
   lines.push("Errors:");
-  for (const e of snapshot.errors) {
+  for (const e of filtered) {
     const action = e.actionable ? ` (next: ${e.actionable})` : "";
     lines.push(`- ${e.provider}: ${e.type}: ${e.message}${action}`);
   }
@@ -69,13 +82,15 @@ export function renderGraph(snapshot: NormalizedSnapshot): string {
       const reset = prettyResetLabel(r.resetAt, r.notes);
       const meta = `${r.source}/${r.confidence}${r.stale ? "/stale" : ""}`;
 
+      const cacheTag = r.source === "cache" || r.stale ? " (cache)" : "";
+
       lines.push(title);
       if (percent != null) {
-        lines.push(`  ${makeBar(percent, 32)}  ${Math.round(percent)}% used`);
+        lines.push(`  ${makeBar(percent, 32)}  ${Math.round(percent)}% used${cacheTag}`);
       } else {
         const usageLabel =
           r.used != null && r.limit != null ? `${r.used}/${r.limit}` : "unknown";
-        lines.push(`  ${usageLabel} used`);
+        lines.push(`  ${usageLabel} used${cacheTag}`);
       }
       lines.push(`  ${reset}`);
       lines.push(`  Source ${meta}`);
@@ -90,12 +105,14 @@ export function renderGraph(snapshot: NormalizedSnapshot): string {
 
 export function renderTable(snapshot: NormalizedSnapshot): string {
   const rows = snapshot.rows.map((r) => {
-    const usage =
+    const cacheTag = r.source === "cache" || r.stale ? " (cache)" : "";
+    const usageRaw =
       r.usedPercent != null
         ? `${Math.round(r.usedPercent)}%`
         : r.used != null && r.limit != null
           ? `${r.used}/${r.limit}`
           : "?";
+    const usage = `${usageRaw}${cacheTag}`;
     const reset = r.resetAt ?? "?";
     const meta = `${r.source}/${r.confidence}${r.stale ? "/stale" : ""}`;
     return {
@@ -110,7 +127,7 @@ export function renderTable(snapshot: NormalizedSnapshot): string {
   const cols = {
     provider: 6,
     window: 16,
-    usage: 10,
+    usage: 18,
     reset: 25,
     meta: 18,
   };
