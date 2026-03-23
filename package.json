@@ -1,6 +1,6 @@
 {
   "name": "qmeter",
-  "version": "0.1.1",
+  "version": "0.1.4",
   "description": "QMeter - unified usage and reset monitor",
   "author": "cloim",
   "type": "module",

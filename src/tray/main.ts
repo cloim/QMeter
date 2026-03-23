@@ -1,5 +1,7 @@
 import { app, BrowserWindow, ipcMain, Menu, Notification, Tray, nativeImage, screen } from "electron";
 import { createRequire } from "node:module";
+import fs from "node:fs/promises";
+import os from "node:os";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { collectSnapshot } from "../core/snapshot.js";
 import { evaluateNotificationPolicy } from "../core/notificationPolicy.js";
 import { loadNotificationState, saveNotificationState } from "./notificationStore.js";
+import { formatRuntimeError, runGuardedTrayTask } from "./runtimeGuard.js";
 import { loadTraySettings, saveTraySettings, type TraySettings } from "./settings.js";
 import type { NormalizedSnapshot, ProviderId } from "../types.js";
 
@@ -107,7 +110,11 @@ async function getSettings(): Promise<TraySettings> {
 function resetRefreshTimer(intervalMs: number): void {
   if (timer) clearInterval(timer);
   timer = setInterval(() => {
-    void refreshSnapshot(false);
+    void runGuardedTrayTask(
+      "background refresh",
+      () => refreshSnapshot(false),
+      reportTrayRuntimeError
+    );
   }, intervalMs);
 }
 
@@ -147,6 +154,39 @@ function makeIcon() {
 
 function notify(title: string, body: string): void {
   new Notification({ title, body }).show();
+}
+
+function getRuntimeLogPath(): string {
+  const localAppData = process.env.LOCALAPPDATA?.trim();
+  const base = localAppData || path.join(os.homedir(), "AppData", "Local");
+  return path.join(base, "qmeter", "tray-runtime.log");
+}
+
+async function appendRuntimeLog(scope: string, error: unknown): Promise<void> {
+  const detail =
+    error instanceof Error ? (error.stack ?? error.message) : formatRuntimeError(error);
+  const line = `[${new Date().toISOString()}] [${scope}] ${detail}\n`;
+  const logPath = getRuntimeLogPath();
+  await fs.mkdir(path.dirname(logPath), { recursive: true });
+  await fs.appendFile(logPath, line, "utf8");
+}
+
+async function reportTrayRuntimeError(
+  scope: string,
+  message: string,
+  error: unknown
+): Promise<void> {
+  console.error(`[tray] ${scope}: ${message}`, error);
+
+  try {
+    await appendRuntimeLog(scope, error);
+  } catch (logError) {
+    console.error("[tray] failed to append runtime log", logError);
+  }
+
+  if (app.isReady()) {
+    notify("QMeter 오류", `${scope}: ${message}`);
+  }
 }
 
 async function checkForUpdates(manual = false): Promise<void> {
@@ -728,8 +768,12 @@ function createTray() {
     },
     {
       label: "Refresh",
-      click: async () => {
-        await refreshSnapshot(true);
+      click: () => {
+        void runGuardedTrayTask(
+          "tray menu refresh",
+          () => refreshSnapshot(true),
+          reportTrayRuntimeError
+        );
       },
     },
     {
@@ -753,7 +797,11 @@ function createTray() {
 function registerIpc() {
   ipcMain.handle("tray:get-snapshot", async () => currentSnapshot);
   ipcMain.handle("tray:refresh", async () => {
-    await refreshSnapshot(true);
+    await runGuardedTrayTask(
+      "renderer refresh",
+      () => refreshSnapshot(true),
+      reportTrayRuntimeError
+    );
     return currentSnapshot;
   });
   ipcMain.handle("tray:get-settings", async () => {
@@ -781,7 +829,11 @@ function registerIpc() {
       await saveTraySettings(next);
       currentSettings = next;
       resetRefreshTimer(next.refreshIntervalMs);
-      await refreshSnapshot(true);
+      await runGuardedTrayTask(
+        "save settings refresh",
+        () => refreshSnapshot(true),
+        reportTrayRuntimeError
+      );
       return {
         refreshIntervalMs: next.refreshIntervalMs,
         visibleProviders: next.visibleProviders,
@@ -802,7 +854,11 @@ async function boot() {
   createTray();
   setupAutoUpdater();
 
-  await refreshSnapshot(true);
+  await runGuardedTrayTask(
+    "boot refresh",
+    () => refreshSnapshot(true),
+    reportTrayRuntimeError
+  );
   resetRefreshTimer(currentSettings.refreshIntervalMs);
 }
 
@@ -816,9 +872,25 @@ if (!gotLock) {
   });
 
   app.whenReady().then(() => {
-    void boot();
+    void runGuardedTrayTask("boot", boot, reportTrayRuntimeError);
   });
 }
+
+process.on("unhandledRejection", (error) => {
+  void reportTrayRuntimeError(
+    "unhandledRejection",
+    formatRuntimeError(error),
+    error
+  );
+});
+
+process.on("uncaughtException", (error) => {
+  void reportTrayRuntimeError(
+    "uncaughtException",
+    formatRuntimeError(error),
+    error
+  );
+});
 
 app.on("window-all-closed", () => {
   // Keep background tray app alive on Windows.
