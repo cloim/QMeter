@@ -87,7 +87,31 @@ Current release model:
 - GitHub is the configured publish provider
 - The repository includes a GitHub Actions release workflow referenced in the README
 
-`.sisyphus/notepads/windows-tray-full-version/decisions.md` records that release automation should keep using the existing `npm run tray:pack` path rather than adding a separate publish script.
+## Release Sequence
+
+When a user asks to ship a change, follow this order unless they explicitly ask for something else:
+
+1. Make the requested code and documentation changes.
+2. Bump the version in [`package.json`](D:\Code\Vibe\QMeter\package.json) and [`package-lock.json`](D:\Code\Vibe\QMeter\package-lock.json).
+3. Run verification:
+   - `npm run typecheck`
+   - `npm test`
+   - `npm run build`
+   - `npm run tray:smoke` when tray behavior changed
+4. Build/package Windows artifacts:
+   - Preferred: `npm run tray:pack`
+   - If the rebuild step is blocked by a locked packaged artifact in `dist/win-unpacked`, close the running packaged app and rerun.
+   - If needed, run `npx electron-builder --win nsis portable` against an already-built `dist` directory as a recovery path.
+5. Commit the changes.
+6. Push the branch.
+7. Create and push the matching Git tag, for example `v0.1.4`.
+8. Let GitHub Actions publish the release from the tag-triggered workflow.
+
+Important rules:
+
+- Keep the app version and the release tag aligned.
+- Do not publish a release tag for code that has not passed local verification.
+- Expect auto-update notifications to compare the installed app version against the latest GitHub release, not just local build outputs.
 
 ## Practical Editing Guidance
 

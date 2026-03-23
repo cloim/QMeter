@@ -159,6 +159,20 @@ Artifacts are generated under electron-builder output directories (per `dist`/`r
   5. `npm test`
   6. `npm run tray:pack` (electron-builder publishes via GitHub provider)
 
+Recommended operator sequence after a shipped change:
+
+1. Update code and docs.
+2. Bump `package.json` and `package-lock.json` to the release version.
+3. Run `npm run typecheck`
+4. Run `npm test`
+5. Run `npm run build`
+6. If tray behavior changed, run `npm run tray:smoke`
+7. Run packaging (`npm run tray:pack`, or `npx electron-builder --win nsis portable` if a previously built packaged app is locking files under `dist/win-unpacked`)
+8. Commit
+9. Push
+10. Tag and push the matching release tag
+11. Let GitHub Actions publish from the tag
+
 Tag release example:
 
 ```bash
