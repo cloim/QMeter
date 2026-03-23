@@ -167,11 +167,15 @@ Recommended operator sequence after a shipped change:
 4. Run `npm test`
 5. Run `npm run build`
 6. If tray behavior changed, run `npm run tray:smoke`
-7. Run packaging (`npm run tray:pack`, or `npx electron-builder --win nsis portable` if a previously built packaged app is locking files under `dist/win-unpacked`)
-8. Commit
-9. Push
-10. Tag and push the matching release tag
-11. Let GitHub Actions publish from the tag
+7. Commit
+8. Push
+9. Tag and push the matching release tag
+10. Let GitHub Actions build/package/publish from the tag
+
+Local packaging remains available as a manual check when needed:
+
+- `npm run tray:pack`
+- `npx electron-builder --win nsis portable`
 
 Tag release example:
 

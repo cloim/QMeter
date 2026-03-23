@@ -98,20 +98,17 @@ When a user asks to ship a change, follow this order unless they explicitly ask 
    - `npm test`
    - `npm run build`
    - `npm run tray:smoke` when tray behavior changed
-4. Build/package Windows artifacts:
-   - Preferred: `npm run tray:pack`
-   - If the rebuild step is blocked by a locked packaged artifact in `dist/win-unpacked`, close the running packaged app and rerun.
-   - If needed, run `npx electron-builder --win nsis portable` against an already-built `dist` directory as a recovery path.
-5. Commit the changes.
-6. Push the branch.
-7. Create and push the matching Git tag, for example `v0.1.4`.
-8. Let GitHub Actions publish the release from the tag-triggered workflow.
+4. Commit the changes.
+5. Push the branch.
+6. Create and push the matching Git tag, for example `v0.1.4`.
+7. Let GitHub Actions build, package, and publish the release from the tag-triggered workflow.
 
 Important rules:
 
 - Keep the app version and the release tag aligned.
 - Do not publish a release tag for code that has not passed local verification.
 - Expect auto-update notifications to compare the installed app version against the latest GitHub release, not just local build outputs.
+- Treat local `npm run tray:pack` as a manual packaging check, not a required release step.
 
 ## Practical Editing Guidance
 
