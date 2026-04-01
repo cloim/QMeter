@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, Menu, Notification, Tray, nativeImage, scr
 import { createRequire } from "node:module";
 import fs from "node:fs/promises";
 import os from "node:os";
-import { readFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,6 +10,11 @@ import { collectSnapshot } from "../core/snapshot.js";
 import { evaluateNotificationPolicy } from "../core/notificationPolicy.js";
 import { loadNotificationState, saveNotificationState } from "./notificationStore.js";
 import { formatRuntimeError, runGuardedTrayTask } from "./runtimeGuard.js";
+import {
+  formatChildProcessGoneDetail,
+  formatMemoryUsageSummary,
+  resolveWindowAction,
+} from "./runtimeTelemetry.js";
 import { loadTraySettings, saveTraySettings, type TraySettings } from "./settings.js";
 import type { NormalizedSnapshot, ProviderId } from "../types.js";
 
@@ -165,10 +170,28 @@ function getRuntimeLogPath(): string {
 async function appendRuntimeLog(scope: string, error: unknown): Promise<void> {
   const detail =
     error instanceof Error ? (error.stack ?? error.message) : formatRuntimeError(error);
+  await appendRuntimeLine(scope, detail);
+}
+
+async function appendRuntimeLine(scope: string, detail: string): Promise<void> {
   const line = `[${new Date().toISOString()}] [${scope}] ${detail}\n`;
   const logPath = getRuntimeLogPath();
   await fs.mkdir(path.dirname(logPath), { recursive: true });
   await fs.appendFile(logPath, line, "utf8");
+}
+
+function appendRuntimeLineSync(scope: string, detail: string): void {
+  const line = `[${new Date().toISOString()}] [${scope}] ${detail}\n`;
+  const logPath = getRuntimeLogPath();
+  mkdirSync(path.dirname(logPath), { recursive: true });
+  appendFileSync(logPath, line, "utf8");
+}
+
+function logRuntimeEvent(scope: string, detail: string): void {
+  console.info(`[tray] ${scope}: ${detail}`);
+  void appendRuntimeLine(scope, detail).catch((logError) => {
+    console.error("[tray] failed to append runtime event", logError);
+  });
 }
 
 async function reportTrayRuntimeError(
@@ -202,7 +225,7 @@ async function checkForUpdates(manual = false): Promise<void> {
       manualUpdateCheck = true;
       notify("QMeter", "업데이트 확인 중...");
     }
-    console.info("[updater] checking for updates", { manual });
+    logRuntimeEvent("updater", `checking manual=${manual}`);
     await autoUpdater.checkForUpdates();
   } catch (err) {
     console.warn("[updater] check failed", err);
@@ -221,11 +244,11 @@ function setupAutoUpdater(): void {
   autoUpdater.autoInstallOnAppQuit = true;
 
   autoUpdater.on("checking-for-update", () => {
-    console.info("[updater] checking-for-update");
+    logRuntimeEvent("updater", "checking-for-update");
   });
 
   autoUpdater.on("update-available", (info: { version?: string }) => {
-    console.info("[updater] update-available", info);
+    logRuntimeEvent("updater", `update-available version=${info.version ?? "unknown"}`);
     if (manualUpdateCheck) {
       notify("QMeter 업데이트", `새 버전(${info.version})을 다운로드합니다.`);
     }
@@ -234,12 +257,12 @@ function setupAutoUpdater(): void {
   autoUpdater.on("download-progress", (progress: { percent?: number }) => {
     if (!manualUpdateCheck) return;
     if (typeof progress.percent === "number") {
-      console.info("[updater] download-progress", Math.round(progress.percent));
+      logRuntimeEvent("updater", `download-progress percent=${Math.round(progress.percent)}`);
     }
   });
 
   autoUpdater.on("update-not-available", (info: { version?: string }) => {
-    console.info("[updater] update-not-available", info);
+    logRuntimeEvent("updater", `update-not-available version=${info.version ?? "unknown"}`);
     if (manualUpdateCheck) {
       notify("QMeter", "현재 최신 버전을 사용 중입니다.");
     }
@@ -247,7 +270,7 @@ function setupAutoUpdater(): void {
   });
 
   autoUpdater.on("update-downloaded", (info: { version?: string }) => {
-    console.info("[updater] update-downloaded", info);
+    logRuntimeEvent("updater", `update-downloaded version=${info.version ?? "unknown"}`);
     notify("QMeter 업데이트 준비 완료", `새 버전(${info.version})이 준비되었습니다. 앱 종료 시 적용됩니다.`);
     manualUpdateCheck = false;
   });
@@ -680,6 +703,10 @@ async function refreshSnapshot(forceRefresh: boolean): Promise<void> {
     debug: false,
     providers,
   });
+  logRuntimeEvent(
+    "refresh",
+    `force=${forceRefresh} rows=${snapshot.rows.length} errors=${snapshot.errors.length} ${formatMemoryUsageSummary(process.memoryUsage())}`
+  );
 
   currentSnapshot = snapshot;
   applyWindowHeight(estimateWindowHeight(snapshot));
@@ -710,12 +737,26 @@ async function refreshSnapshot(forceRefresh: boolean): Promise<void> {
 }
 
 function toggleWindow() {
-  if (!win || !tray) return;
-  if (win.isVisible()) {
-    win.hide();
+  if (!tray) return;
+
+  const hasWindow = !!win && !win.isDestroyed();
+  const isVisible = hasWindow && !!win?.isVisible();
+  const action = resolveWindowAction({ hasWindow, isVisible }, "toggle");
+
+  if (action === "hide-destroy") {
+    logRuntimeEvent("window", "toggle hide-destroy");
+    destroyWindow();
     return;
   }
-  // Ensure stable first-open height even if renderer resize hasn't fired yet.
+
+  if (action === "create-show") {
+    logRuntimeEvent("window", "toggle create-show");
+    createWindow();
+  } else if (action === "show") {
+    logRuntimeEvent("window", "toggle show");
+  }
+
+  if (!win || win.isDestroyed()) return;
   applyWindowHeight(estimateWindowHeight(currentSnapshot));
   positionWindow();
   win.show();
@@ -753,10 +794,35 @@ function createWindow() {
   });
 
   win.on("blur", () => {
-    if (win && win.isVisible()) win.hide();
+    const hasWindow = !!win && !win.isDestroyed();
+    const isVisible = hasWindow && !!win?.isVisible();
+    if (resolveWindowAction({ hasWindow, isVisible }, "blur") === "hide-destroy") {
+      logRuntimeEvent("window", "blur hide-destroy");
+      destroyWindow();
+    }
+  });
+
+  win.webContents.on("render-process-gone", (_event, details) => {
+    logRuntimeEvent("render-process-gone", formatChildProcessGoneDetail(details));
+  });
+
+  win.webContents.on("unresponsive", () => {
+    logRuntimeEvent("window", `unresponsive ${formatMemoryUsageSummary(process.memoryUsage())}`);
   });
 
   win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(renderHtml(currentSnapshot))}`);
+}
+
+function destroyWindow(): void {
+  if (!win) return;
+  if (win.isDestroyed()) {
+    win = null;
+    return;
+  }
+  const current = win;
+  win = null;
+  current.removeAllListeners("blur");
+  current.destroy();
 }
 
 function createTray() {
@@ -850,9 +916,9 @@ function registerIpc() {
 async function boot() {
   currentSettings = await loadTraySettings();
   registerIpc();
-  createWindow();
   createTray();
   setupAutoUpdater();
+  logRuntimeEvent("boot", `pid=${process.pid} version=${getDisplayVersion()} packaged=${app.isPackaged}`);
 
   await runGuardedTrayTask(
     "boot refresh",
@@ -867,7 +933,10 @@ if (!gotLock) {
   app.quit();
 } else {
   app.on("second-instance", () => {
-    if (win && !win.isVisible()) win.show();
+    if (!win || win.isDestroyed()) {
+      createWindow();
+    }
+    win?.show();
     win?.focus();
   });
 
@@ -875,6 +944,10 @@ if (!gotLock) {
     void runGuardedTrayTask("boot", boot, reportTrayRuntimeError);
   });
 }
+
+app.on("child-process-gone", (_event, details) => {
+  logRuntimeEvent("child-process-gone", formatChildProcessGoneDetail(details));
+});
 
 process.on("unhandledRejection", (error) => {
   void reportTrayRuntimeError(
@@ -892,11 +965,23 @@ process.on("uncaughtException", (error) => {
   );
 });
 
+process.on("exit", (code) => {
+  try {
+    appendRuntimeLineSync(
+      "process-exit",
+      `code=${code} ${formatMemoryUsageSummary(process.memoryUsage())}`
+    );
+  } catch {
+    // Best effort only.
+  }
+});
+
 app.on("window-all-closed", () => {
   // Keep background tray app alive on Windows.
 });
 
 app.on("before-quit", () => {
+  logRuntimeEvent("before-quit", formatMemoryUsageSummary(process.memoryUsage()));
   if (timer) clearInterval(timer);
   if (updaterTimer) clearInterval(updaterTimer);
   timer = null;

@@ -99,6 +99,11 @@ Main responsibilities:
 - Updater checks for packaged builds
 - IPC handlers for renderer actions
 
+Important runtime detail:
+
+- The popup window is created lazily and destroyed on blur so renderer resources are not kept alive when the tray UI is closed.
+- The main process remains responsible for background refresh, updater checks, and notifications even when no popup window exists.
+
 The HTML UI is currently generated inline in the main process rather than being maintained as a separate frontend app. That means UI edits often happen inside the large `renderHtml(...)` function in the same file.
 
 ## Notifications

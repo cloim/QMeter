@@ -22,6 +22,12 @@ Because all of that is in one file, changes here need extra care. A small UI edi
 
 The popup is a frameless `BrowserWindow` whose HTML is generated inline by `renderHtml(...)`.
 
+Current lifecycle behavior:
+
+- the tray popup window is created lazily on demand
+- when the popup loses focus, the window is destroyed rather than kept hidden
+- background refresh and notifications continue in the main process even when no popup window exists
+
 Current UI characteristics:
 
 - dark card-based popup
@@ -84,6 +90,20 @@ Operational rules:
 - Persist enough state to suppress duplicate alerts across refreshes
 
 When touching notification behavior, confirm both the policy evaluation and the tray dispatch path.
+
+## Runtime Diagnostics
+
+Tray runtime diagnostics are written to:
+
+- Windows: `%LOCALAPPDATA%\\qmeter\\tray-runtime.log`
+
+The runtime log is intended to capture more than ordinary JS exceptions. Current diagnostics include:
+
+- guarded task failures
+- updater state transitions
+- refresh summaries with memory usage
+- renderer and child-process gone events
+- process exit and quit-time memory snapshots
 
 ## Updater Behavior
 
