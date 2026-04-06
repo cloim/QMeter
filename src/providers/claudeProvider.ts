@@ -36,7 +36,6 @@ export class ClaudeProvider implements Provider {
         env: process.env,
         ...(process.platform === "win32"
           ? {
-              useConpty: false,
               useConptyDll: false,
             }
           : {}),
@@ -76,24 +75,99 @@ export class ClaudeProvider implements Provider {
 
     const done = new Promise<ProviderResult>((resolve) => {
       let finished = false;
+      let interval: ReturnType<typeof setInterval> | null = null;
+      const timeouts = new Set<ReturnType<typeof setTimeout>>();
+      let ptyExited = false;
+      const dataListener = p.onData((d) => {
+        append(d);
+      });
+      const exitListener = p.onExit(() => {
+        ptyExited = true;
+      });
 
-       const finish = (reason: "success" | "timeout") => {
-         if (finished) return;
-         finished = true;
+      const clearPendingTimers = () => {
+        if (interval) {
+          clearInterval(interval);
+          interval = null;
+        }
+        for (const timeout of timeouts) {
+          clearTimeout(timeout);
+        }
+        timeouts.clear();
+      };
 
-         const clean = cleanClaudeScreenText(buf);
-         const parsed = parseClaudeUsageFromScreen(clean);
+      const waitForPtyExit = () =>
+        new Promise<void>((resolveExit) => {
+          if (ptyExited) {
+            resolveExit();
+            return;
+          }
 
-         let errors = parsed.errors;
-         if (reason === "timeout") {
-           const timeoutErr: NormalizedError = {
-             provider: "claude",
-             type: "timeout",
-             message: `claude /usage timed out after ${timeoutMs}ms`,
-             actionable: "run `claude` and verify /usage is available and you are logged in",
-           };
-           errors = parsed.rows.length === 0 ? [timeoutErr] : [...errors, timeoutErr];
-         }
+          const exitWaitListener = p.onExit(() => {
+            exitWaitListener.dispose();
+            clearTimeout(timeout);
+            resolveExit();
+          });
+          const timeout = setTimeout(() => {
+            exitWaitListener.dispose();
+            resolveExit();
+          }, 1_500);
+        });
+
+      const cleanupPty = async () => {
+        clearPendingTimers();
+        dataListener.dispose();
+
+        const exitWait = waitForPtyExit();
+
+        try {
+          p.kill();
+        } catch {
+          // Best effort only.
+        }
+
+        const destroy = (p as ReturnType<typeof pty.spawn> & { destroy?: () => void }).destroy;
+        if (typeof destroy === "function") {
+          try {
+            destroy.call(p);
+          } catch {
+            // Best effort only.
+          }
+        }
+
+        await exitWait;
+        exitListener.dispose();
+        const emitter = p as ReturnType<typeof pty.spawn> & {
+          removeAllListeners?: (eventName?: string) => void;
+        };
+        emitter.removeAllListeners?.();
+      };
+
+      const schedule = (fn: () => void, ms: number) => {
+        const timeout = setTimeout(() => {
+          timeouts.delete(timeout);
+          fn();
+        }, ms);
+        timeouts.add(timeout);
+      };
+
+      const finish = async (reason: "success" | "timeout") => {
+        if (finished) return;
+        finished = true;
+
+        const clean = cleanClaudeScreenText(buf);
+        const parsed = parseClaudeUsageFromScreen(clean);
+
+        let errors = parsed.errors;
+        if (reason === "timeout") {
+          const timeoutErr: NormalizedError = {
+            provider: "claude",
+            type: "timeout",
+            message: `claude /usage timed out after ${timeoutMs}ms`,
+            actionable: "run `claude` and verify /usage is available and you are logged in",
+          };
+          errors = parsed.rows.length === 0 ? [timeoutErr] : [...errors, timeoutErr];
+        }
 
         const debugLines = clean
           .split("\n")
@@ -104,10 +178,10 @@ export class ClaudeProvider implements Provider {
           .slice(-50)
           .join("\n");
 
-         const out: ProviderResult = {
-           rows: parsed.rows,
-           errors,
-         };
+        const out: ProviderResult = {
+          rows: parsed.rows,
+          errors,
+        };
         if (ctx.debug) {
           out.debug = {
             reason,
@@ -117,43 +191,31 @@ export class ClaudeProvider implements Provider {
         }
 
         try {
-          // Close overlay + exit, best-effort.
-          p.write("\x1b");
-          setTimeout(() => {
-            p.write("/exit");
-            setTimeout(() => p.write("\r"), 300);
-            setTimeout(() => p.kill(), 800);
-          }, 300);
+          await cleanupPty();
         } finally {
           resolve(out);
         }
       };
 
-      const interval = setInterval(() => {
+      interval = setInterval(() => {
         if (Date.now() - start > timeoutMs) {
-          clearInterval(interval);
-          finish("timeout");
+          void finish("timeout");
           return;
         }
 
         // Success condition: can extract both session + week rows.
-         const clean = cleanClaudeScreenText(buf);
-         const parsed = parseClaudeUsageFromScreen(clean);
+        const clean = cleanClaudeScreenText(buf);
+        const parsed = parseClaudeUsageFromScreen(clean);
         const hasSession = parsed.rows.some((r) => r.window === "claude:session");
         const hasWeek = parsed.rows.some((r) => r.window.startsWith("claude:week"));
         if (hasSession && hasWeek) {
-          clearInterval(interval);
-          finish("success");
+          void finish("success");
         }
       }, 300);
 
-      p.onData((d) => {
-        append(d);
-      });
-
       // Drive /usage.
-      setTimeout(() => p.write("/usage"), 2500);
-      setTimeout(() => p.write("\r"), 4000);
+      schedule(() => p.write("/usage"), 2500);
+      schedule(() => p.write("\r"), 4000);
     });
 
     // Add some environment-aware diagnostics if startup itself fails.
