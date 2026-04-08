@@ -36,6 +36,7 @@ export class ClaudeProvider implements Provider {
         env: process.env,
         ...(process.platform === "win32"
           ? {
+              useConpty: false,
               useConptyDll: false,
             }
           : {}),

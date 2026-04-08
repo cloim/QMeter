@@ -75,7 +75,7 @@ describe("ClaudeProvider", () => {
     expect(destroy).toHaveBeenCalledTimes(1);
   });
 
-  test("does not force the legacy Windows PTY backend", async () => {
+  test("forces the legacy Windows PTY backend on Windows", async () => {
     let onDataListener: ((chunk: string) => void) | undefined;
 
     spawnMock.mockReturnValue({
@@ -112,6 +112,7 @@ describe("ClaudeProvider", () => {
     }
 
     const options = spawnMock.mock.calls[0]?.[2];
-    expect(options?.useConpty).not.toBe(false);
+    expect(options?.useConpty).toBe(false);
+    expect(options?.useConptyDll).toBe(false);
   });
 });
