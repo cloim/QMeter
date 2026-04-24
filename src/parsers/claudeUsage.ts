@@ -65,8 +65,8 @@ export function parseClaudeUsageFromScreen(screenText: string): {
   const rows: NormalizedRow[] = [];
   const errors: NormalizedError[] = [];
 
-  const sessionAnchor = /Current session/i;
-  const weekAnchor = /Current week \(all models\)/i;
+  const sessionAnchor = /(?:^|\n)\s*Current session\s*(?=\n|$)/i;
+  const weekAnchor = /(?:^|\n)\s*Current week \(all models\)\s*(?=\n|$)/i;
 
   const sessionUsed = parsePercentNear(screenText, sessionAnchor);
   const sessionReset = parseResetLineNear(screenText, sessionAnchor);

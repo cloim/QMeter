@@ -39,6 +39,32 @@ Current week (all models)
     expect(reset == null || Number.isFinite(Date.parse(reset))).toBe(true);
   });
 
+  test("anchors session parsing to the actual section header", () => {
+    const filler = "Context line with unrelated details.\n".repeat(40);
+    const screen = cleanClaudeScreenText(`
+/subagent-driven-development (superpowers) Use when executing implementation plans with independent tasks in the current session.
+Choose a command to run.
+${filler}
+
+Current session
+  7% used
+  Resets 12pm (Asia/Seoul)
+
+Current week (all models)
+  1% used
+  Resets Apr 26, 6pm (Asia/Seoul)
+`);
+
+    const parsed = parseClaudeUsageFromScreen(screen);
+    const session = parsed.rows.find((r) => r.window === "claude:session");
+    const week = parsed.rows.find((r) => r.window === "claude:week(all-models)");
+
+    expect(parsed.errors).toHaveLength(0);
+    expect(session?.usedPercent).toBe(7);
+    expect(session?.notes).toBe("Resets 12pm (Asia/Seoul)");
+    expect(week?.usedPercent).toBe(1);
+  });
+
   test("returns parse-failed error when no rows found", () => {
     const parsed = parseClaudeUsageFromScreen("hello world");
     expect(parsed.rows).toHaveLength(0);
