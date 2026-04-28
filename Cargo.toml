@@ -1,0 +1,16 @@
+[workspace]
+members = [
+  "crates/qmeter-core",
+  "crates/qmeter-cli",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.8"
+edition = "2024"
+license = "MIT"
+authors = ["cloim"]
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
