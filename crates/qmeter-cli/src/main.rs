@@ -1,4 +1,3 @@
 fn main() {
-    println!("{}", qmeter_core::crate_name());
+    println!("{}", env!("CARGO_PKG_NAME"));
 }
-
