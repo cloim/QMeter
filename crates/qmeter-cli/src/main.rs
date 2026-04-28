@@ -1,6 +1,9 @@
 use clap::{Parser, ValueEnum};
 use qmeter_core::output::{render_graph, render_table};
-use qmeter_core::snapshot::{collect_fixture_snapshot, CollectOptions};
+use qmeter_core::snapshot::{
+    collect_fixture_snapshot, collect_unimplemented_snapshot, is_fixture_mode_from_env,
+    CollectOptions,
+};
 use qmeter_core::types::{NormalizedSnapshot, ProviderId};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
@@ -62,7 +65,11 @@ fn run(cli: Cli) -> Result<(NormalizedSnapshot, i32), String> {
         providers,
     };
 
-    let snapshot = collect_fixture_snapshot(&opts);
+    let snapshot = if is_fixture_mode_from_env() {
+        collect_fixture_snapshot(&opts)
+    } else {
+        collect_unimplemented_snapshot(&opts)
+    };
     let exit_code = if !snapshot.rows.is_empty() && snapshot.errors.is_empty() {
         0
     } else if !snapshot.rows.is_empty() && !snapshot.errors.is_empty() {

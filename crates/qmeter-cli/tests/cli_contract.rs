@@ -75,3 +75,20 @@ fn selected_provider_filters_rows() {
     assert_eq!(rows.len(), 2);
     assert!(rows.iter().all(|row| row["provider"] == "codex"));
 }
+
+#[test]
+fn non_fixture_mode_reports_provider_gap_instead_of_demo_rows() {
+    let output = qmeter()
+        .env_remove("USAGE_STATUS_FIXTURE")
+        .args(["--json", "--providers", "codex"])
+        .assert()
+        .code(3)
+        .get_output()
+        .stdout
+        .clone();
+
+    let value: Value = serde_json::from_slice(&output).expect("stdout should be JSON");
+    assert_eq!(value["rows"].as_array().expect("rows array").len(), 0);
+    assert_eq!(value["errors"][0]["provider"], "codex");
+    assert_eq!(value["errors"][0]["type"], "acquire-failed");
+}

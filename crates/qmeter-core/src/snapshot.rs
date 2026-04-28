@@ -1,5 +1,6 @@
 use crate::types::{
-    Confidence, NormalizedRow, NormalizedSnapshot, ProviderId, SourceKind,
+    Confidence, NormalizedError, NormalizedErrorType, NormalizedRow, NormalizedSnapshot,
+    ProviderId, SourceKind,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -26,6 +27,30 @@ pub fn collect_fixture_snapshot(opts: &CollectOptions) -> NormalizedSnapshot {
         rows,
         errors: Vec::new(),
     }
+}
+
+pub fn collect_unimplemented_snapshot(opts: &CollectOptions) -> NormalizedSnapshot {
+    NormalizedSnapshot {
+        fetched_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        rows: Vec::new(),
+        errors: opts
+            .providers
+            .iter()
+            .map(|provider| NormalizedError {
+                provider: *provider,
+                error_type: NormalizedErrorType::AcquireFailed,
+                message: "Rust provider acquisition is not implemented yet".to_string(),
+                actionable: Some("use USAGE_STATUS_FIXTURE=demo or the legacy Node CLI for live provider data".to_string()),
+            })
+            .collect(),
+    }
+}
+
+pub fn is_fixture_mode_from_env() -> bool {
+    std::env::var("USAGE_STATUS_FIXTURE")
+        .ok()
+        .map(|value| value.trim().eq_ignore_ascii_case("demo"))
+        .unwrap_or(false)
 }
 
 fn claude_fixture_rows() -> [NormalizedRow; 2] {
