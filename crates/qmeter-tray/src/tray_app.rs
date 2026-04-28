@@ -1,10 +1,23 @@
 use crate::runtime_log::{append_runtime_log, RuntimeLogConfig};
+use crate::tray_state::TrayState;
 
 pub fn run_tray_app() -> Result<(), Box<dyn std::error::Error>> {
     append_runtime_log(
         &RuntimeLogConfig::from_env(),
         "startup",
         "qmeter tray starting",
+    )?;
+    let mut state = TrayState::default();
+    state.refresh_fixture();
+    let popup_text = state.render_popup_text();
+    append_runtime_log(
+        &RuntimeLogConfig::from_env(),
+        "refresh",
+        &format!(
+            "rows={} popup_chars={}",
+            state.snapshot.as_ref().map_or(0, |s| s.rows.len()),
+            popup_text.len()
+        ),
     )?;
     run_platform_tray()
 }
