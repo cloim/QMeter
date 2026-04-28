@@ -146,6 +146,17 @@ During build, `scripts/copy-resources.mjs` copies them into `dist/resources` aut
 
 ## Packaging (Distributables)
 
+### Rust Release Binaries
+
+```bash
+cargo build --release --workspace
+```
+
+Outputs:
+
+- `target/release/qmeter.exe`
+- `target/release/qmeter-tray.exe`
+
 ### Directory Output
 
 ```bash

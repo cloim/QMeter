@@ -21,6 +21,9 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Validate release tag format
         run: |
           $tag = "${{ github.ref_name }}"
@@ -45,6 +48,12 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Rust test
+        run: cargo test --workspace
+
+      - name: Build Rust release binaries
+        run: cargo build --release --workspace
+
       - name: Build and publish Windows artifacts
         run: npm run tray:pack
         env:
@@ -60,4 +69,6 @@ jobs:
             dist/*.exe
             dist/*.blockmap
             dist/latest*.yml
+            target/release/qmeter.exe
+            target/release/qmeter-tray.exe
           if-no-files-found: warn

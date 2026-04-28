@@ -146,6 +146,17 @@ npm run tray:smoke
 
 ## 패키징(배포본)
 
+### Rust 릴리즈 바이너리
+
+```bash
+cargo build --release --workspace
+```
+
+산출물:
+
+- `target/release/qmeter.exe`
+- `target/release/qmeter-tray.exe`
+
 ### 디렉터리 아웃풋
 
 ```bash

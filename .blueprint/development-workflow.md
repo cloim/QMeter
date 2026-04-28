@@ -115,6 +115,19 @@ Do not move or rename these assets casually; tray packaging and inline UI render
 
 ## Packaging And Release
 
+The Rust workspace currently produces release binaries with:
+
+```powershell
+cargo build --release --workspace
+```
+
+Expected Rust binary outputs:
+
+- `target/release/qmeter.exe`
+- `target/release/qmeter-tray.exe`
+
+The tag-triggered GitHub release workflow builds and uploads these Rust binaries alongside the legacy Electron artifacts while the migration is in progress.
+
 Packaging configuration is inside [`package.json`](D:\Code\Vibe\QMeter\package.json) under `build`.
 
 Current release model:
