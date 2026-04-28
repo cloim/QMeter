@@ -25,3 +25,4 @@ Thumbs.db
 
 # local tool state
 .sisyphus/
+.worktrees/
