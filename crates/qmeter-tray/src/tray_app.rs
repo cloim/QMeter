@@ -1,19 +1,39 @@
+use std::collections::BTreeMap;
+
+use crate::notification_store::{
+    NotificationStoreConfig, load_notification_state, save_notification_state,
+};
 use crate::runtime_log::{RuntimeLogConfig, append_runtime_log};
 use crate::tray_state::TrayState;
+use qmeter_core::notification_policy::{
+    AlertLevel, NotificationEvent, NotificationPolicyConfig, NotificationState,
+    NotificationThresholds, QuietHours, evaluate_notification_policy,
+};
+use qmeter_core::settings::{TraySettingsConfig, load_tray_settings};
 
 pub fn run_tray_app() -> Result<(), Box<dyn std::error::Error>> {
     let log_config = RuntimeLogConfig::from_env();
     append_runtime_log(&log_config, "startup", "qmeter tray starting")?;
-    let mut state = TrayState::default();
-    refresh_state(&mut state, &log_config, false)?;
-    run_platform_tray(state, log_config)
+    let settings_config = TraySettingsConfig::from_env();
+    let settings = load_tray_settings(&settings_config)?;
+    append_runtime_log(
+        &log_config,
+        "settings",
+        &format!("path={}", settings_config.path.display()),
+    )?;
+    let notification_config = NotificationStoreConfig::from_env();
+    let notification_state = load_notification_state(&notification_config)?;
+    let mut state = TrayState::new(settings);
+    let _ = refresh_state(&mut state, &log_config, false, None)?;
+    run_platform_tray(state, log_config, notification_config, notification_state)
 }
 
 fn refresh_state(
     state: &mut TrayState,
     log_config: &RuntimeLogConfig,
     force_refresh: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+    notification_state: Option<&mut BTreeMap<String, NotificationState>>,
+) -> Result<Vec<NotificationEvent>, Box<dyn std::error::Error>> {
     state.refresh_current_mode(force_refresh);
     let popup_text = state.render_popup_text();
     append_runtime_log(
@@ -26,13 +46,29 @@ fn refresh_state(
             popup_text.len()
         ),
     )?;
-    Ok(())
+
+    let Some(notification_state) = notification_state else {
+        return Ok(Vec::new());
+    };
+    let Some(snapshot) = &state.snapshot else {
+        return Ok(Vec::new());
+    };
+    let evaluation = evaluate_notification_policy(
+        &snapshot.rows,
+        notification_state,
+        &notification_policy_config(state),
+        &snapshot.fetched_at,
+    );
+    *notification_state = evaluation.next_state;
+    Ok(evaluation.events)
 }
 
 #[cfg(windows)]
 fn run_platform_tray(
     mut state: TrayState,
     log_config: RuntimeLogConfig,
+    notification_config: NotificationStoreConfig,
+    mut notification_state: BTreeMap<String, NotificationState>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use std::time::{Duration, Instant};
     use tray_icon::{
@@ -71,7 +107,10 @@ fn run_platform_tray(
             } else if event.id == open_id {
                 show_popup("QMeter", &state.render_popup_text());
             } else if event.id == refresh_id {
-                refresh_state(&mut state, &log_config, true)?;
+                let events =
+                    refresh_state(&mut state, &log_config, true, Some(&mut notification_state))?;
+                save_notification_state(&notification_config, &notification_state)?;
+                show_notification_events(&events);
                 last_refresh = Instant::now();
                 show_popup("QMeter", &state.render_popup_text());
             } else if event.id == settings_id {
@@ -95,8 +134,19 @@ fn run_platform_tray(
         }
 
         if last_refresh.elapsed() >= refresh_interval {
-            if let Err(err) = refresh_state(&mut state, &log_config, false) {
-                append_runtime_log(&log_config, "refresh-error", &err.to_string())?;
+            match refresh_state(
+                &mut state,
+                &log_config,
+                false,
+                Some(&mut notification_state),
+            ) {
+                Ok(events) => {
+                    save_notification_state(&notification_config, &notification_state)?;
+                    show_notification_events(&events);
+                }
+                Err(err) => {
+                    append_runtime_log(&log_config, "refresh-error", &err.to_string())?;
+                }
             }
             last_refresh = Instant::now();
         }
@@ -106,12 +156,55 @@ fn run_platform_tray(
 }
 
 #[cfg(windows)]
+fn show_notification_events(events: &[NotificationEvent]) {
+    for event in events {
+        let title = match event.level {
+            AlertLevel::Normal => continue,
+            AlertLevel::Warning => "QMeter warning",
+            AlertLevel::Critical => "QMeter critical",
+        };
+        let percent = event
+            .row
+            .used_percent
+            .map(|value| format!("{value:.0}%"))
+            .unwrap_or_else(|| "?".to_string());
+        let reset = event.row.reset_at.as_deref().unwrap_or("unknown reset");
+        show_popup(
+            title,
+            &format!(
+                "{} {} reached {} ({})",
+                event.row.provider.as_str(),
+                event.row.window,
+                percent,
+                reset
+            ),
+        );
+    }
+}
+
+#[cfg(windows)]
 fn show_popup(title: &str, body: &str) {
     let _ = rfd::MessageDialog::new()
         .set_title(title)
         .set_description(body)
         .set_level(rfd::MessageLevel::Info)
         .show();
+}
+
+fn notification_policy_config(state: &TrayState) -> NotificationPolicyConfig {
+    NotificationPolicyConfig {
+        thresholds: NotificationThresholds {
+            warning_percent: state.settings.notification.warning_percent,
+            critical_percent: state.settings.notification.critical_percent,
+        },
+        cooldown_ms: state.settings.notification.cooldown_minutes * 60_000,
+        hysteresis_percent: state.settings.notification.hysteresis_percent,
+        quiet_hours: QuietHours {
+            enabled: state.settings.notification.quiet_hours.enabled,
+            start_hour: state.settings.notification.quiet_hours.start_hour,
+            end_hour: state.settings.notification.quiet_hours.end_hour,
+        },
+    }
 }
 
 fn render_settings_text(state: &TrayState) -> String {
@@ -129,6 +222,8 @@ fn render_settings_text(state: &TrayState) -> String {
 fn run_platform_tray(
     _state: TrayState,
     _log_config: RuntimeLogConfig,
+    _notification_config: NotificationStoreConfig,
+    _notification_state: BTreeMap<String, NotificationState>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     Err("qmeter-tray is only supported on Windows".into())
 }

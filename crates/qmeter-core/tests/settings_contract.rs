@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use qmeter_core::settings::{TraySettingsConfig, default_tray_settings};
+use qmeter_core::settings::{
+    TraySettingsConfig, default_tray_settings, load_tray_settings, save_tray_settings,
+};
 
 #[test]
 fn default_settings_match_current_tray_defaults() {
@@ -38,4 +40,35 @@ fn settings_path_uses_override_or_appdata_default() {
             .join("qmeter")
             .join("tray-settings.v1.json")
     );
+}
+
+#[test]
+fn settings_round_trip_preserves_values() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let cfg = TraySettingsConfig {
+        path: dir.path().join("tray-settings.v1.json"),
+    };
+    let mut settings = default_tray_settings();
+    settings.refresh_interval_ms = 30_000;
+    settings.visible_providers.claude = false;
+
+    save_tray_settings(&cfg, &settings).expect("save settings");
+    let loaded = load_tray_settings(&cfg).expect("load settings");
+
+    assert_eq!(loaded.refresh_interval_ms, 30_000);
+    assert!(!loaded.visible_providers.claude);
+    assert!(loaded.visible_providers.codex);
+}
+
+#[test]
+fn missing_settings_loads_defaults_and_creates_file() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let cfg = TraySettingsConfig {
+        path: dir.path().join("nested").join("tray-settings.v1.json"),
+    };
+
+    let loaded = load_tray_settings(&cfg).expect("load settings");
+
+    assert_eq!(loaded, default_tray_settings());
+    assert!(cfg.path.exists());
 }

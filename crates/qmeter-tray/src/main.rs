@@ -1,3 +1,4 @@
+mod notification_store;
 mod runtime_log;
 mod tray_app;
 mod tray_state;

@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::{fs, io};
 
 use serde::{Deserialize, Serialize};
 
@@ -105,4 +106,34 @@ pub fn default_tray_settings() -> TraySettings {
             },
         },
     }
+}
+
+pub fn load_tray_settings(config: &TraySettingsConfig) -> io::Result<TraySettings> {
+    match fs::read_to_string(&config.path) {
+        Ok(raw) => serde_json::from_str(&raw).map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("invalid tray settings JSON: {err}"),
+            )
+        }),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            let settings = default_tray_settings();
+            save_tray_settings(config, &settings)?;
+            Ok(settings)
+        }
+        Err(err) => Err(err),
+    }
+}
+
+pub fn save_tray_settings(config: &TraySettingsConfig, settings: &TraySettings) -> io::Result<()> {
+    if let Some(parent) = config.path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let json = serde_json::to_string_pretty(settings).map_err(|err| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("failed to serialize tray settings: {err}"),
+        )
+    })?;
+    fs::write(&config.path, format!("{json}\n"))
 }
