@@ -1,25 +1,75 @@
 # Development Workflow
 
-## Primary Commands
+## Commands
 
-### Rust Workspace
+Run all Rust tests:
 
-The Rust port is implemented as a Cargo workspace.
+```powershell
+cargo test --workspace
+```
 
-- `cargo test --workspace`
-  Runs Rust unit and integration tests.
-- `cargo run -p qmeter-cli -- --json`
-  Runs the Rust CLI.
-- `cargo run -p qmeter-cli -- --view table`
-  Runs the Rust CLI table view.
-- `cargo run -p qmeter-cli -- --view graph`
-  Runs the Rust CLI graph view.
-- `cargo check -p qmeter-tray`
-  Checks the Windows native tray crate without launching the tray loop.
-- `cargo build --release --workspace`
-  Builds release binaries.
+Run CLI:
 
-For fixture-driven local checks:
+```powershell
+cargo run -p qmeter-cli -- --json
+cargo run -p qmeter-cli -- --view table
+cargo run -p qmeter-cli -- --view graph
+```
+
+Check tray:
+
+```powershell
+cargo check -p qmeter-tray
+```
+
+Run tray:
+
+```powershell
+cargo run -p qmeter-tray
+```
+
+Build release binaries:
+
+```powershell
+cargo build --release --workspace
+```
+
+Expected outputs:
+
+- `target/release/qmeter.exe`
+- `target/release/qmeter-tray.exe`
+
+## Fixture Mode
+
+Use fixture mode to verify output and tray rendering without live provider access:
+
+```powershell
+$env:USAGE_STATUS_FIXTURE='demo'
+cargo run -p qmeter-cli -- --json
+cargo run -p qmeter-cli -- --view table
+cargo run -p qmeter-cli -- --view graph
+cargo run -p qmeter-tray
+```
+
+## Environment Variables
+
+- `USAGE_STATUS_FIXTURE=demo`: deterministic sample rows
+- `USAGE_STATUS_CODEX_COMMAND`: Codex command override
+- `USAGE_STATUS_CACHE_PATH`: cache file override
+- `USAGE_STATUS_CACHE_TTL_SECS`: cache TTL override
+- `USAGE_STATUS_TRAY_SETTINGS_PATH`: tray settings file override
+- `USAGE_STATUS_TRAY_NOTIFICATION_STATE_PATH`: notification state file override
+
+## Verification Order
+
+For code changes:
+
+1. `cargo fmt --all --check`
+2. `cargo test --workspace`
+3. `cargo check -p qmeter-tray` when tray code changed
+4. `cargo build --release --workspace` before release or legacy-removal commits
+
+For CLI/output changes, also smoke fixture output:
 
 ```powershell
 $env:USAGE_STATUS_FIXTURE='demo'
@@ -28,142 +78,22 @@ cargo run -p qmeter-cli -- --view table
 cargo run -p qmeter-cli -- --view graph
 ```
 
-### Legacy Node/Electron
+## Release
 
-Project commands are defined in [`package.json`](D:\Code\Vibe\QMeter\package.json).
+The tag-triggered workflow in [`.github/workflows/release.yml`](../.github/workflows/release.yml) validates the tag, runs Rust tests, builds release binaries, creates a zip, and uploads assets to the matching GitHub release.
 
-- `npm run build`
-  Builds TypeScript with `tsup` and copies tray resources into `dist/resources`.
-- `npm run typecheck`
-  Runs `tsc --noEmit`.
-- `npm test`
-  Runs the Vitest suite once.
-- `npm run tray:start`
-  Starts the Electron tray app from the built output.
-- `npm run tray:smoke`
-  Runs the tray smoke entry.
-- `npm run tray:pack`
-  Builds and packages Windows NSIS and portable artifacts.
-- `npm run tray:pack:dir`
-  Builds an unpacked directory artifact.
+Release sequence:
 
-## Expected Verification Order
+1. Finish code and documentation.
+2. Run the verification order above.
+3. Commit.
+4. Push.
+5. Tag with `vMAJOR.MINOR.PATCH`.
+6. Push the tag.
 
-For Rust changes, verify in this order:
-
-1. `cargo test --workspace`
-2. `cargo check -p qmeter-tray` when tray code changed
-3. Fixture CLI smoke commands when CLI/output changed
-
-The legacy verification order remains useful while TypeScript/Electron code is still present.
-
-For most code changes, verify in this order:
-
-1. `npm run typecheck`
-2. `npm test`
-3. `npm run build`
-4. If tray behavior changed, run `npm run tray:smoke`
-
-If a change affects packaging or updater logic, also validate the relevant packaging command.
-
-## Test Layout
-
-Tests live under [`test`](D:\Code\Vibe\QMeter\test).
-
-Current test coverage focuses on core logic:
-
-- cache behavior
-- Claude usage parsing
-- notification policy/state
-- scheduler behavior
-
-When adding behavior in core or providers, keep tests close to the current style: isolated logic tests first, integration only where the runtime behavior matters.
-
-## Fixture And Local Debug Modes
-
-The collection layer has a built-in fixture mode in [`src/core/snapshot.ts`](D:\Code\Vibe\QMeter\src\core\snapshot.ts).
-
-Useful environment variables:
-
-- `USAGE_STATUS_FIXTURE=demo`
-  Returns deterministic sample Claude/Codex rows without touching real tools.
-- `USAGE_STATUS_BASH_EXE`
-  Overrides the Git Bash path used by the legacy Claude `/usage` screen runner.
-- `USAGE_STATUS_CODEX_COMMAND`
-  Overrides the Codex command path.
-- `USAGE_STATUS_CACHE_PATH`
-  Overrides cache file location.
-- `USAGE_STATUS_CACHE_TTL_SECS`
-  Overrides cache TTL.
-- `USAGE_STATUS_TRAY_SETTINGS_PATH`
-  Overrides tray settings file location.
-
-Use fixture mode when working on output, UI, or notification behavior without depending on live provider state.
-
-The Rust Claude provider uses Claude Code OAuth credentials for live collection. On Windows and Linux it reads `~/.claude/.credentials.json`; on macOS it tries the `Claude Code-credentials` Keychain item first. Tests that exercise auth failure should isolate `HOME` and `USERPROFILE` so they do not depend on the developer's real Claude login state.
-
-## Resource And Build Notes
-
-Static assets live in [`resources`](D:\Code\Vibe\QMeter\resources).
-
-The build step depends on [`scripts/copy-resources.mjs`](D:\Code\Vibe\QMeter\scripts\copy-resources.mjs) to copy:
-
-- `QMeter.ico`
-- `QMeter.png`
-- `Claude.png`
-- `Codex.png`
-
-Do not move or rename these assets casually; tray packaging and inline UI rendering assume they exist.
-
-## Packaging And Release
-
-The Rust workspace currently produces release binaries with:
+Example:
 
 ```powershell
-cargo build --release --workspace
+git tag v0.1.8
+git push origin v0.1.8
 ```
-
-Expected Rust binary outputs:
-
-- `target/release/qmeter.exe`
-- `target/release/qmeter-tray.exe`
-
-The tag-triggered GitHub release workflow builds and uploads these Rust binaries alongside the legacy Electron artifacts while the migration is in progress.
-
-Packaging configuration is inside [`package.json`](D:\Code\Vibe\QMeter\package.json) under `build`.
-
-Current release model:
-
-- Electron Builder targets `nsis` and `portable`
-- GitHub is the configured publish provider
-- The repository includes a GitHub Actions release workflow referenced in the README
-
-## Release Sequence
-
-When a user asks to ship a change, follow this order unless they explicitly ask for something else:
-
-1. Make the requested code and documentation changes.
-2. Bump the version in [`package.json`](D:\Code\Vibe\QMeter\package.json) and [`package-lock.json`](D:\Code\Vibe\QMeter\package-lock.json).
-3. Run verification:
-   - `npm run typecheck`
-   - `npm test`
-   - `npm run build`
-   - `npm run tray:smoke` when tray behavior changed
-4. Commit the changes.
-5. Push the branch.
-6. Create and push the matching Git tag, for example `v0.1.4`.
-7. Let GitHub Actions build, package, and publish the release from the tag-triggered workflow.
-
-Important rules:
-
-- Keep the app version and the release tag aligned.
-- Do not publish a release tag for code that has not passed local verification.
-- Expect auto-update notifications to compare the installed app version against the latest GitHub release, not just local build outputs.
-- Treat local `npm run tray:pack` as a manual packaging check, not a required release step.
-
-## Practical Editing Guidance
-
-- Prefer changing shared logic in `src/core/*`, `src/providers/*`, or `src/types.ts` before touching both CLI and tray layers separately.
-- Treat `src/tray/main.ts` as high-impact: it mixes lifecycle, updater logic, IPC, and inline HTML.
-- Keep public CLI output stable unless the change explicitly updates the contract and tests.
-- Use `npm run typecheck` as the baseline verification tool. `.sisyphus/notepads/windows-tray-full-version/issues.md` notes that `typescript-language-server` is not available in the current environment.

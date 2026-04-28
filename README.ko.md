@@ -2,153 +2,87 @@
 
 [English](./README.md) | 한국어
 
-QMeter는 Claude Code/ Codex 사용량과 초기화 시간을 한눈에 확인하는 Windows 트레이 앱 + CLI입니다.
-
-![QMeter Screenshot](./Screenshot.png)
+QMeter는 Claude Code와 Codex 사용량, 초기화 시간, 캐시 상태, provider 부분 실패를 확인하는 Rust native Windows 트레이 앱 + CLI입니다.
 
 ## 주요 기능
 
-- Claude / Codex 사용량 통합 조회
-- 트레이 팝업 UI (카드 기반)
-- JSON 출력 CLI (`qmeter --json`)
-- 캐시/부분 실패 처리
-- 환경설정
-  - 새로고침 주기 변경
-  - 표시 카드(Claude/Codex) on/off
+- Claude/Codex 사용량 통합 조회
+- table, graph, JSON CLI 출력
+- Windows tray icon, 수동 새로고침, native popup
+- 저장된 tray 설정 기반 백그라운드 새로고침
+- cooldown, hysteresis, quiet hours를 반영한 threshold 알림
+- live 조회 실패 시 provider별 cache fallback
 
-## Rust Native 포팅 상태
+## 요구사항
 
-QMeter는 Rust native Windows CLI + tray 앱으로 포팅 중입니다. Rust workspace는 `crates/` 아래에 있고, 기존 Node/Electron 구현은 포팅 검증용 기준으로 아직 남겨 둡니다.
+- Rust stable
+- 트레이 앱은 Windows 11 기준
+- Claude 사용량 조회에는 Claude Code 로그인 필요
+- Codex 사용량 조회에는 Codex CLI 로그인 필요
 
-Rust 쪽 주요 명령:
+## 빌드/실행
 
-```bash
+```powershell
 cargo test --workspace
 cargo run -p qmeter-cli -- --json
 cargo run -p qmeter-cli -- --view table
 cargo run -p qmeter-cli -- --view graph
 cargo check -p qmeter-tray
+cargo run -p qmeter-tray
 ```
 
-결정적인 로컬 출력 확인은 fixture mode를 사용합니다.
+결정적 출력 확인은 fixture mode를 사용합니다.
 
-```bash
-USAGE_STATUS_FIXTURE=demo cargo run -p qmeter-cli -- --json
+```powershell
+$env:USAGE_STATUS_FIXTURE='demo'
+cargo run -p qmeter-cli -- --json
+cargo run -p qmeter-cli -- --view table
+cargo run -p qmeter-cli -- --view graph
 ```
 
-## 요구사항
+## CLI
 
-- Node.js 20+
-- Rust stable
-- Windows 11 (트레이 앱 기준)
-
-## 설치
-
-```bash
-npm install
+```powershell
+cargo run -p qmeter-cli -- --json --providers claude,codex --refresh --debug
 ```
 
-## 설치본 사용자용 CLI 빠른 시작
+옵션:
 
-Windows 설치 파일(NSIS/Portable)로 설치하면 트레이 앱은 바로 사용할 수 있지만,
-`qmeter` CLI 명령이 PATH에 자동 등록되지는 않습니다.
+- `--json`: normalized JSON 출력
+- `--refresh`: fresh cache 무시
+- `--debug`: 민감정보 없는 provider 진단 출력
+- `--view table|graph`: 터미널 출력 형식 선택
+- `--providers claude,codex,all`: provider 선택
 
-CLI를 사용하려면 Node.js 환경에서 아래 방식 중 하나를 사용하세요.
+종료 코드:
 
-1) 빌드 후 직접 실행
+- `0`: 전체 성공
+- `1`: 부분 성공
+- `2`: 인자 또는 사용 오류
+- `3`: 전체 provider 실패
 
-```bash
-npm run build
-node dist/cli.js --help
-node dist/cli.js --json
+## Tray
+
+```powershell
+cargo run -p qmeter-tray
 ```
 
-2) 전역 링크 후 `qmeter` 명령 사용
+트레이 앱 동작:
 
-```bash
-npm link
-qmeter --help
-qmeter --json
-```
+- 설정: `%APPDATA%\qmeter\tray-settings.v1.json`
+- 런타임 로그: `%LOCALAPPDATA%\qmeter\tray-runtime.log`
+- 알림 상태: `%LOCALAPPDATA%\qmeter\notification-state.v1.json`
+- 메뉴: `Open QMeter`, `Refresh`, `Settings`, `Quit`
 
-자주 쓰는 옵션
+## Provider 참고
 
-- `--json`: JSON 형식 출력
-- `--refresh`: 캐시 무시 후 새로 조회
-- `--debug`: 디버그 정보 출력(민감정보 제외)
-- `--view table|graph`: 출력 형식 선택
-- `--providers claude,codex,all`: 조회 provider 선택
+Claude 사용량은 Claude Code OAuth credential과 Anthropic usage endpoint로 조회합니다. Windows/Linux에서는 `~/.claude/.credentials.json`을 읽고, macOS에서는 `Claude Code-credentials` Keychain 항목을 먼저 시도합니다.
 
-## 개발/실행
+Codex 사용량은 Codex app-server JSON-RPC integration으로 조회합니다.
 
-### 타입체크
+## Release Binaries
 
-```bash
-npm run typecheck
-```
-
-### 테스트
-
-```bash
-npm test
-```
-
-### 빌드
-
-```bash
-npm run build
-```
-
-### CLI 실행
-
-```bash
-node dist/cli.js --json
-```
-
-또는 전역 링크:
-
-```bash
-npm link
-qmeter --json
-```
-
-### 트레이 앱 실행
-
-```bash
-npm run tray:start
-```
-
-### 트레이 스모크 테스트
-
-```bash
-npm run tray:smoke
-```
-
-## 환경설정
-
-트레이 UI의 설정 버튼(톱니)에서 아래 항목을 설정할 수 있습니다.
-
-- 새로고침 주기
-- 표시할 카드(Claude/Codex)
-
-설정은 로컬 사용자 설정 폴더에 저장됩니다.
-
-## 리소스 파일
-
-`resources` 폴더의 리소스를 사용합니다.
-
-- `resources/QMeter.ico`
-- `resources/QMeter.png`
-- `resources/Claude.png`
-- `resources/Codex.png`
-
-빌드 시 `scripts/copy-resources.mjs`로 `dist/resources`에 자동 복사됩니다.
-
-## 패키징(배포본)
-
-### Rust 릴리즈 바이너리
-
-```bash
+```powershell
 cargo build --release --workspace
 ```
 
@@ -157,51 +91,10 @@ cargo build --release --workspace
 - `target/release/qmeter.exe`
 - `target/release/qmeter-tray.exe`
 
-### 디렉터리 아웃풋
+태그 기반 GitHub Actions가 이 바이너리를 빌드하고 해당 GitHub release에 업로드합니다.
 
-```bash
-npm run tray:pack:dir
-```
+## Troubleshooting
 
-### Windows 설치본(NSIS + Portable)
-
-```bash
-npm run tray:pack
-```
-
-산출물은 `dist` 하위가 아니라 electron-builder 기본 경로(`dist`/`release` 설정에 따름)로 생성됩니다.
-
-## 자동 업데이트
-
-- 설치된 패키지 앱에서만 동작합니다(로컬 개발 실행 제외).
-- 앱 시작 시 백그라운드로 업데이트를 확인합니다.
-- 트레이 메뉴에 `Check for Updates`가 있어 수동 확인이 가능합니다.
-- 수동 확인 시 상태 알림이 명확히 표시됩니다: 확인 중, 업데이트 있음/다운로드, 최신 버전, 실패.
-- 다운로드 완료 후 앱을 종료하면 새 버전이 적용됩니다.
-
-## GitHub 릴리즈 자동화
-
-- 워크플로우: `.github/workflows/release.yml`
-- 트리거: `v*` 형식 태그 push (예: `v0.1.1`)
-- 파이프라인:
-  1. 태그 형식 검증 (`vMAJOR.MINOR.PATCH`)
-  2. push된 태그 기준으로 `package.json` 버전 동기화
-  3. `npm ci`
-  4. `npm run typecheck`
-  5. `npm test`
-  6. `npm run tray:pack` (electron-builder GitHub provider로 배포)
-
-태그 릴리즈 예시:
-
-```bash
-git tag v0.1.1
-git push origin v0.1.1
-```
-
-## 트러블슈팅
-
-- Codex 실행 실패(`spawn EINVAL` 등)
-  - Windows 셸/경로 이슈일 수 있습니다.
-  - Codex 설치/로그인 상태 확인 후 재실행하세요.
-- 카드가 보이지 않음
-  - 해당 provider가 설치/인증되지 않았거나, 설정에서 OFF일 수 있습니다.
+- Claude row가 없으면 Claude Code 로그인 또는 OAuth credential 파일 상태를 확인하세요.
+- Codex row가 없으면 Codex CLI 설치, 로그인, PATH 상태를 확인하세요.
+- live provider 없이 렌더링만 확인하려면 `USAGE_STATUS_FIXTURE=demo`를 사용하세요.

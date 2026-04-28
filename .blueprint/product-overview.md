@@ -2,66 +2,60 @@
 
 ## Purpose
 
-QMeter is a Windows-focused usage monitor for Claude Code and Codex. It exposes the same core usage snapshot through two user-facing entry points:
+QMeter is a Rust-native local usage monitor for Claude Code and Codex. It exposes one normalized snapshot through:
 
-- A CLI command, `qmeter`, for scripts and terminal use.
-- A Windows tray app that shows a popup UI, background refresh, notifications, and packaged-app update checks.
-
-The repository currently carries the legacy TypeScript/Electron app and an in-progress Rust workspace that is the forward path for native binaries.
+- `qmeter`, a CLI for terminal and scripts
+- `qmeter-tray`, a Windows tray app for background refresh, native popup display, settings, and notifications
 
 ## Supported Runtime
 
-- Rust stable for the native workspace
-- Node.js 20+ for the legacy TypeScript/Electron implementation
-- Windows 11 for the tray app
-- Electron for packaged tray builds
+- Rust stable
+- Windows 11 for the tray surface
+- Claude Code credentials for Claude usage
+- Codex CLI/app-server availability for Codex usage
 
-The CLI can still run outside the tray app, but several provider assumptions are Windows-oriented:
-
-- Rust Claude collection expects Claude Code OAuth credentials and calls the Anthropic OAuth usage endpoint directly.
-- Legacy TypeScript Claude collection expects a PTY-capable environment and, on Windows, defaults to Git Bash.
-- Codex collection relies on the Codex CLI/app-server path being locally available.
+There is no Node/Electron runtime requirement in the Rust-native app.
 
 ## Core User Flows
 
 ### CLI
 
-The CLI is implemented in [`src/cli.ts`](D:\Code\Vibe\QMeter\src\cli.ts) and [`src/main.ts`](D:\Code\Vibe\QMeter\src\main.ts).
+The CLI entry point is [`crates/qmeter-cli/src/main.rs`](../crates/qmeter-cli/src/main.rs).
 
 It supports:
 
-- Table output by default
-- Graph output with `--view graph`
+- table output by default
+- graph output with `--view graph`
 - JSON output with `--json`
-- Cache bypass with `--refresh`
-- Debug diagnostics with `--debug`
-- Provider selection with `--providers claude,codex,all`
+- cache bypass with `--refresh`
+- debug diagnostics with `--debug`
+- provider selection with `--providers claude,codex,all`
 
-Exit codes are meaningful:
+Exit codes:
 
 - `0`: full success
 - `1`: partial success
 - `2`: argument or usage error
-- `3`: total failure
+- `3`: total provider failure
 
 ### Tray App
 
-The tray app is implemented from [`src/tray/main.ts`](D:\Code\Vibe\QMeter\src\tray\main.ts).
+The tray app entry point is [`crates/qmeter-tray/src/main.rs`](../crates/qmeter-tray/src/main.rs).
 
 It provides:
 
-- Tray icon with popup window
-- Manual refresh
-- Configurable refresh interval
-- Provider visibility toggles
-- Threshold-based notifications
-- Auto-update checks for packaged builds only
+- Windows tray icon and context menu
+- native popup display for the current snapshot
+- manual refresh
+- configurable refresh interval
+- provider visibility settings loaded from disk
+- threshold notifications with persisted cooldown state
 
-## What The Snapshot Represents
+## Snapshot Contract
 
-The shared data contract is defined in [`src/types.ts`](D:\Code\Vibe\QMeter\src\types.ts).
+The shared data contract is defined in [`crates/qmeter-core/src/types.rs`](../crates/qmeter-core/src/types.rs).
 
-Each usage row includes:
+Each row includes:
 
 - `provider`
 - `window`
@@ -72,15 +66,13 @@ Each usage row includes:
 - `stale`
 - `notes`
 
-This contract is the common language between providers, cache, CLI output, tests, and tray UI.
+The contract is shared by providers, cache, CLI output, tray state, tests, and release artifacts.
 
-## Non-Goals And Constraints
+## Non-Goals
 
-Based on the current code and `.sisyphus` plans, this repository intentionally does not do the following:
+QMeter intentionally does not:
 
-- Manage authentication or sign-in flows for Claude/Codex
-- Store secrets or tokens in cache/settings files
-- Depend on a remote backend service
-- Provide long-term usage history or dashboard analytics
-
-The design favors local-only collection, explicit partial-failure handling, and compact operational tooling.
+- manage Claude/Codex sign-in
+- store provider credentials or tokens in cache/settings files
+- depend on a remote backend
+- provide long-term usage analytics

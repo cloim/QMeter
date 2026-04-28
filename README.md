@@ -2,153 +2,87 @@
 
 English | [한국어](./README.ko.md)
 
-QMeter is a Windows tray app + CLI that lets you check Claude Code/Codex usage and reset timing at a glance.
+QMeter is a Rust-native Windows tray app and CLI for checking Claude Code and Codex usage, reset timing, cache state, and partial provider failures.
 
-![QMeter Screenshot](./Screenshot.png)
+## Features
 
-## Key Features
+- Unified Claude/Codex usage snapshot
+- CLI output as table, graph, or JSON
+- Windows tray icon with manual refresh and native popup
+- Background refresh using persisted tray settings
+- Threshold notifications with cooldown, hysteresis, and quiet hours
+- Per-provider cache fallback when live collection fails
 
-- Unified usage view for Claude and Codex
-- Tray popup UI (card-based)
-- JSON output CLI (`qmeter --json`)
-- Cache and partial-failure handling
-- Settings
-  - Refresh interval
-  - Card visibility (Claude/Codex)
+## Requirements
 
-## Rust Native Port Status
+- Rust stable
+- Windows 11 for the tray app
+- Claude Code login for Claude usage
+- Codex CLI login for Codex usage
 
-QMeter is being ported to a Rust-native Windows CLI + tray app. The Rust workspace is available under `crates/` while the legacy Node/Electron implementation remains for parity checks.
+## Build And Run
 
-Useful Rust commands:
-
-```bash
+```powershell
 cargo test --workspace
 cargo run -p qmeter-cli -- --json
 cargo run -p qmeter-cli -- --view table
 cargo run -p qmeter-cli -- --view graph
 cargo check -p qmeter-tray
+cargo run -p qmeter-tray
 ```
 
 Use fixture mode for deterministic local output:
 
-```bash
-USAGE_STATUS_FIXTURE=demo cargo run -p qmeter-cli -- --json
+```powershell
+$env:USAGE_STATUS_FIXTURE='demo'
+cargo run -p qmeter-cli -- --json
+cargo run -p qmeter-cli -- --view table
+cargo run -p qmeter-cli -- --view graph
 ```
 
-## Requirements
+## CLI
 
-- Node.js 20+
-- Rust stable
-- Windows 11 (for tray app)
-
-## Installation
-
-```bash
-npm install
+```powershell
+cargo run -p qmeter-cli -- --json --providers claude,codex --refresh --debug
 ```
 
-## CLI Quick Start for Installer Users
+Options:
 
-If you install QMeter via Windows installer (NSIS/Portable), the tray app is available right away,
-but the `qmeter` CLI command is not automatically added to PATH.
+- `--json`: print normalized JSON
+- `--refresh`: bypass fresh cache
+- `--debug`: print provider diagnostics without secrets
+- `--view table|graph`: choose terminal rendering
+- `--providers claude,codex,all`: select providers
 
-To use CLI, use one of the following from a Node.js environment.
+Exit codes:
 
-1) Build and run directly
+- `0`: full success
+- `1`: partial success
+- `2`: argument or usage error
+- `3`: total provider failure
 
-```bash
-npm run build
-node dist/cli.js --help
-node dist/cli.js --json
+## Tray
+
+```powershell
+cargo run -p qmeter-tray
 ```
 
-2) Link globally and use `qmeter`
+The tray app:
 
-```bash
-npm link
-qmeter --help
-qmeter --json
-```
+- loads settings from `%APPDATA%\qmeter\tray-settings.v1.json`
+- writes runtime logs to `%LOCALAPPDATA%\qmeter\tray-runtime.log`
+- stores notification state at `%LOCALAPPDATA%\qmeter\notification-state.v1.json`
+- supports `Open QMeter`, `Refresh`, `Settings`, and `Quit` menu actions
 
-Common options
+## Provider Notes
 
-- `--json`: Print JSON output
-- `--refresh`: Bypass cache and refresh data
-- `--debug`: Print debug diagnostics (no secrets)
-- `--view table|graph`: Select output mode
-- `--providers claude,codex,all`: Select providers
+Claude usage is collected through Claude Code OAuth credentials and Anthropic's usage endpoint. On Windows/Linux, QMeter reads `~/.claude/.credentials.json`; on macOS it tries the `Claude Code-credentials` Keychain item first.
 
-## Development / Run
+Codex usage is collected through the Codex app-server JSON-RPC integration.
 
-### Typecheck
+## Release Binaries
 
-```bash
-npm run typecheck
-```
-
-### Test
-
-```bash
-npm test
-```
-
-### Build
-
-```bash
-npm run build
-```
-
-### Run CLI
-
-```bash
-node dist/cli.js --json
-```
-
-Or global link:
-
-```bash
-npm link
-qmeter --json
-```
-
-### Run Tray App
-
-```bash
-npm run tray:start
-```
-
-### Tray Smoke Test
-
-```bash
-npm run tray:smoke
-```
-
-## Settings
-
-You can configure the following in the tray UI settings (gear icon):
-
-- Refresh interval
-- Visible cards (Claude/Codex)
-
-Settings are saved in the local user settings directory.
-
-## Resource Files
-
-QMeter uses files in the `resources` folder.
-
-- `resources/QMeter.ico`
-- `resources/QMeter.png`
-- `resources/Claude.png`
-- `resources/Codex.png`
-
-During build, `scripts/copy-resources.mjs` copies them into `dist/resources` automatically.
-
-## Packaging (Distributables)
-
-### Rust Release Binaries
-
-```bash
+```powershell
 cargo build --release --workspace
 ```
 
@@ -157,69 +91,10 @@ Outputs:
 - `target/release/qmeter.exe`
 - `target/release/qmeter-tray.exe`
 
-### Directory Output
-
-```bash
-npm run tray:pack:dir
-```
-
-### Windows Installer (NSIS + Portable)
-
-```bash
-npm run tray:pack
-```
-
-Artifacts are generated under electron-builder output directories (per `dist`/`release` settings), not under runtime `dist` assets only.
-
-## Auto Update
-
-- Works only in packaged app builds (not in local dev run).
-- App performs background update checks on startup.
-- Tray menu includes `Check for Updates` for manual checks.
-- Manual check notifications show explicit statuses: checking, update available/downloading, up-to-date, and error.
-- After download finishes, update is applied when the app exits.
-
-## GitHub Release Automation
-
-- Workflow: `.github/workflows/release.yml`
-- Trigger: push tag matching `v*` (example: `v0.1.1`)
-- Pipeline:
-  1. Validate tag format (`vMAJOR.MINOR.PATCH`)
-  2. Sync `package.json` version from the pushed tag
-  3. `npm ci`
-  4. `npm run typecheck`
-  5. `npm test`
-  6. `npm run tray:pack` (electron-builder publishes via GitHub provider)
-
-Recommended operator sequence after a shipped change:
-
-1. Update code and docs.
-2. Bump `package.json` and `package-lock.json` to the release version.
-3. Run `npm run typecheck`
-4. Run `npm test`
-5. Run `npm run build`
-6. If tray behavior changed, run `npm run tray:smoke`
-7. Commit
-8. Push
-9. Tag and push the matching release tag
-10. Let GitHub Actions build/package/publish from the tag
-
-Local packaging remains available as a manual check when needed:
-
-- `npm run tray:pack`
-- `npx electron-builder --win nsis portable`
-
-Tag release example:
-
-```bash
-git tag v0.1.1
-git push origin v0.1.1
-```
+Tag-triggered GitHub Actions builds these binaries and uploads them to the matching GitHub release.
 
 ## Troubleshooting
 
-- Codex launch failure (e.g. `spawn EINVAL`)
-  - This can be a Windows shell/path issue.
-  - Verify Codex installation/login status, then retry.
-- Card not visible
-  - The provider may be missing/not authenticated, or disabled in settings.
+- Missing Claude rows usually means Claude Code is not logged in or the OAuth credentials file is unavailable.
+- Missing Codex rows usually means Codex CLI is not installed, not logged in, or unavailable on PATH.
+- Set `USAGE_STATUS_FIXTURE=demo` to test CLI/tray rendering without touching live providers.

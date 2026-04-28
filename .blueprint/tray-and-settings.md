@@ -2,135 +2,95 @@
 
 ## Tray Entry Point
 
-The tray application starts from [`src/tray/main.ts`](D:\Code\Vibe\QMeter\src\tray\main.ts).
+The Rust tray app starts at [`crates/qmeter-tray/src/main.rs`](../crates/qmeter-tray/src/main.rs).
 
-This file currently owns:
+Runtime implementation lives in:
 
-- Electron app bootstrap
-- single-instance lock
-- BrowserWindow creation
-- Tray creation and context menu
-- updater event wiring
-- refresh scheduling
-- notification dispatch
-- inline popup HTML and renderer-side script
-- IPC registration
+- [`tray_app.rs`](../crates/qmeter-tray/src/tray_app.rs)
+- [`tray_state.rs`](../crates/qmeter-tray/src/tray_state.rs)
+- [`runtime_log.rs`](../crates/qmeter-tray/src/runtime_log.rs)
+- [`notification_store.rs`](../crates/qmeter-tray/src/notification_store.rs)
 
-Because all of that is in one file, changes here need extra care. A small UI edit can accidentally affect updater or lifecycle behavior if the file is patched casually.
+## UI Model
 
-## Window And UI Model
+The tray creates a Windows tray icon and context menu with:
 
-The popup is a frameless `BrowserWindow` whose HTML is generated inline by `renderHtml(...)`.
+- `Open QMeter`
+- `Refresh`
+- `Settings`
+- `Quit`
 
-Current lifecycle behavior:
+The current popup surface is a native message dialog rendered from the normalized snapshot graph. This keeps the app Rust-native and avoids Electron, Chromium, and unsafe Win32 UI calls.
 
-- the tray popup window is created lazily on demand
-- when the popup loses focus, the window is destroyed rather than kept hidden
-- background refresh and notifications continue in the main process even when no popup window exists
+## Refresh Loop
 
-Current UI characteristics:
+On startup, the tray loads settings, collects a snapshot, writes runtime telemetry, and then runs a menu/event loop.
 
-- dark card-based popup
-- one provider card per visible provider
-- session/week progress bars
-- inline settings modal
-- last-checked timestamp
-- manual refresh button
+Refresh behavior:
 
-The UI is not currently a separate React/Vite app. There is no standalone renderer build step.
-
-## IPC Surface
-
-The preload bridge and IPC handlers currently support snapshot/settings operations.
-
-Relevant files:
-
-- [`src/tray/preload.ts`](D:\Code\Vibe\QMeter\src\tray\preload.ts)
-- [`src/tray/main.ts`](D:\Code\Vibe\QMeter\src\tray\main.ts)
-
-Handlers include:
-
-- `tray:get-snapshot`
-- `tray:refresh`
-- `tray:get-settings`
-- `tray:save-settings`
-- `tray:set-height`
-
-Important caveat: the current BrowserWindow config uses `nodeIntegration: true` and `contextIsolation: false`. That is functional for the current implementation, but it is not a hardened Electron security posture. If security tightening work starts, this is one of the first places to revisit.
+- background refresh uses `refreshIntervalMs`
+- manual refresh bypasses fresh cache
+- fixture mode uses deterministic rows
+- live mode uses the same provider snapshot path as CLI
+- refresh errors are written to the runtime log
 
 ## Settings Persistence
 
-Settings are defined and validated in [`src/tray/settings.ts`](D:\Code\Vibe\QMeter\src\tray\settings.ts).
+Settings are defined in [`crates/qmeter-core/src/settings.rs`](../crates/qmeter-core/src/settings.rs).
 
-Default persisted fields include:
+Default path:
+
+```text
+%APPDATA%\qmeter\tray-settings.v1.json
+```
+
+Override:
+
+```text
+USAGE_STATUS_TRAY_SETTINGS_PATH
+```
+
+Stored settings include:
 
 - `startupEnabled`
 - `refreshIntervalMs`
 - `visibleProviders`
 - notification thresholds
-- cooldown
+- notification cooldown
 - hysteresis
 - quiet hours
 
-Default storage location:
-
-- Windows: `%APPDATA%\\qmeter\\tray-settings.v1.json`
-- Override: `USAGE_STATUS_TRAY_SETTINGS_PATH`
-
-The code is designed so settings files should contain preferences only, not provider credentials or tokens.
+Settings must not contain provider credentials or tokens.
 
 ## Notifications
 
-Notification behavior uses the evaluated policy from [`src/core/notificationPolicy.ts`](D:\Code\Vibe\QMeter\src\core\notificationPolicy.ts) and persistent state from [`src/tray/notificationStore.ts`](D:\Code\Vibe\QMeter\src\tray\notificationStore.ts).
+Notification policy is evaluated through [`crates/qmeter-core/src/notification_policy.rs`](../crates/qmeter-core/src/notification_policy.rs).
 
-Operational rules:
+Rules:
 
-- Alert only on threshold transitions or cooldown re-eligibility
-- Respect quiet hours when enabled
-- Persist enough state to suppress duplicate alerts across refreshes
+- notify on warning/critical transitions
+- re-notify only after cooldown
+- use hysteresis to avoid threshold flapping
+- respect quiet hours
 
-When touching notification behavior, confirm both the policy evaluation and the tray dispatch path.
+Persisted notification state path:
 
-## Runtime Diagnostics
+```text
+%LOCALAPPDATA%\qmeter\notification-state.v1.json
+```
 
-Tray runtime diagnostics are written to:
+Override:
 
-- Windows: `%LOCALAPPDATA%\\qmeter\\tray-runtime.log`
+```text
+USAGE_STATUS_TRAY_NOTIFICATION_STATE_PATH
+```
 
-The runtime log is intended to capture more than ordinary JS exceptions. Current diagnostics include:
+## Runtime Log
 
-- guarded task failures
-- updater state transitions
-- refresh summaries with memory usage
-- renderer and child-process gone events
-- process exit and quit-time memory snapshots
+Runtime diagnostics path:
 
-## Updater Behavior
+```text
+%LOCALAPPDATA%\qmeter\tray-runtime.log
+```
 
-Auto-update uses `electron-updater` inside [`src/tray/main.ts`](D:\Code\Vibe\QMeter\src\tray\main.ts).
-
-Current rules:
-
-- Updater checks run only when `app.isPackaged` is true
-- Manual checks show explicit user notifications
-- Background checks stay quieter
-- Downloaded updates are installed on app quit
-
-`.sisyphus/notepads/windows-tray-full-version/issues.md` notes that development mode cannot exercise real auto-update behavior, so the code must keep a clear manual message for that case.
-
-`.sisyphus/notepads/windows-tray-full-version/learnings.md` records two important implementation lessons:
-
-- Manual checks should rely on `checkForUpdates()` plus event handling so “up to date” is shown explicitly.
-- Background checks should suppress noisy notifications even though they share the same updater events.
-
-## Startup And Packaging
-
-The settings schema includes `startupEnabled`, but startup management is only meaningful in packaged Windows app flows.
-
-Packaging expectations are documented in the README and implemented via Electron Builder. Before changing tray boot or updater logic, consider whether the behavior differs between:
-
-- local dev run
-- unpacked build
-- installed packaged app
-
-Those environments do not behave identically.
+The log records startup, settings path, refresh summaries, and refresh errors.

@@ -15,16 +15,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Validate release tag format
+        shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
           if ($tag -notmatch '^v\d+\.\d+\.\d+([-.][0-9A-Za-z.-]+)?$') {
@@ -32,43 +27,34 @@ jobs:
             exit 1
           }
 
-      - name: Sync package version from tag
-        run: |
-          $tag = "${{ github.ref_name }}"
-          $version = $tag.TrimStart('v')
-          node -e "const fs=require('fs'); const p='package.json'; const j=JSON.parse(fs.readFileSync(p,'utf8')); j.version=process.argv[1]; fs.writeFileSync(p, JSON.stringify(j, null, 2) + '\n');" $version
-          Write-Host "Updated package.json version to $version"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Typecheck
-        run: npm run typecheck
-
       - name: Test
-        run: npm test
-
-      - name: Rust test
         run: cargo test --workspace
 
-      - name: Build Rust release binaries
+      - name: Build release binaries
         run: cargo build --release --workspace
 
-      - name: Build and publish Windows artifacts
-        run: npm run tray:pack
+      - name: Stage artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          Copy-Item target/release/qmeter.exe artifacts/qmeter.exe
+          Copy-Item target/release/qmeter-tray.exe artifacts/qmeter-tray.exe
+          Compress-Archive -Path artifacts/qmeter.exe, artifacts/qmeter-tray.exe -DestinationPath artifacts/qmeter-windows-${{ github.ref_name }}.zip -Force
+
+      - name: Publish GitHub release assets
+        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --title $tag --notes "QMeter Rust native release $tag"
+          }
+          gh release upload $tag artifacts/qmeter.exe artifacts/qmeter-tray.exe artifacts/qmeter-windows-${{ github.ref_name }}.zip --clobber
 
-      - name: Upload build artifacts
-        if: always()
+      - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
           name: qmeter-windows-${{ github.ref_name }}
-          path: |
-            dist/*.exe
-            dist/*.blockmap
-            dist/latest*.yml
-            target/release/qmeter.exe
-            target/release/qmeter-tray.exe
-          if-no-files-found: warn
+          path: artifacts/*
