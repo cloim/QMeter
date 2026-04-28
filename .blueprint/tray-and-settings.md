@@ -8,6 +8,8 @@ Runtime implementation lives in:
 
 - [`tray_app.rs`](../crates/qmeter-tray/src/tray_app.rs)
 - [`tray_state.rs`](../crates/qmeter-tray/src/tray_state.rs)
+- [`popup_main.rs`](../crates/qmeter-tray/src/popup_main.rs)
+- [`popup_model.rs`](../crates/qmeter-tray/src/popup_model.rs)
 - [`runtime_log.rs`](../crates/qmeter-tray/src/runtime_log.rs)
 - [`notification_store.rs`](../crates/qmeter-tray/src/notification_store.rs)
 
@@ -20,7 +22,9 @@ The tray creates a Windows tray icon and context menu with:
 - `Settings`
 - `Quit`
 
-The current popup surface is a native message dialog rendered from the normalized snapshot graph. This keeps the app Rust-native and avoids Electron, Chromium, and unsafe Win32 UI calls.
+The usage popup is a Rust-native `qmeter-popup.exe` GUI window launched as a sibling process by the tray. It renders normalized snapshot rows as provider cards with progress bars, reset timing, stale state, errors, and a manual refresh action.
+
+Notification and simple settings summaries can still use native message dialogs. The primary usage surface should stay in `qmeter-popup.exe` so the tray event loop remains small and the GUI can own its own window loop.
 
 ## Refresh Loop
 

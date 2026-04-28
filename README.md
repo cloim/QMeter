@@ -28,7 +28,8 @@ cargo run -p qmeter-cli -- --json
 cargo run -p qmeter-cli -- --view table
 cargo run -p qmeter-cli -- --view graph
 cargo check -p qmeter-tray
-cargo run -p qmeter-tray
+cargo build -p qmeter-tray --bins
+cargo run -p qmeter-tray --bin qmeter-tray
 ```
 
 Use fixture mode for deterministic local output:
@@ -64,7 +65,8 @@ Exit codes:
 ## Tray
 
 ```powershell
-cargo run -p qmeter-tray
+cargo build -p qmeter-tray --bins
+cargo run -p qmeter-tray --bin qmeter-tray
 ```
 
 The tray app:
@@ -73,6 +75,7 @@ The tray app:
 - writes runtime logs to `%LOCALAPPDATA%\qmeter\tray-runtime.log`
 - stores notification state at `%LOCALAPPDATA%\qmeter\notification-state.v1.json`
 - supports `Open QMeter`, `Refresh`, `Settings`, and `Quit` menu actions
+- opens the sibling `qmeter-popup.exe` GUI window for usage cards and manual refresh
 
 ## Provider Notes
 
@@ -90,6 +93,7 @@ Outputs:
 
 - `target/release/qmeter.exe`
 - `target/release/qmeter-tray.exe`
+- `target/release/qmeter-popup.exe`
 
 Tag-triggered GitHub Actions builds these binaries and uploads them to the matching GitHub release.
 

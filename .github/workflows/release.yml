@@ -39,7 +39,8 @@ jobs:
           New-Item -ItemType Directory -Force artifacts | Out-Null
           Copy-Item target/release/qmeter.exe artifacts/qmeter.exe
           Copy-Item target/release/qmeter-tray.exe artifacts/qmeter-tray.exe
-          Compress-Archive -Path artifacts/qmeter.exe, artifacts/qmeter-tray.exe -DestinationPath artifacts/qmeter-windows-${{ github.ref_name }}.zip -Force
+          Copy-Item target/release/qmeter-popup.exe artifacts/qmeter-popup.exe
+          Compress-Archive -Path artifacts/qmeter.exe, artifacts/qmeter-tray.exe, artifacts/qmeter-popup.exe -DestinationPath artifacts/qmeter-windows-${{ github.ref_name }}.zip -Force
 
       - name: Publish GitHub release assets
         shell: pwsh
@@ -51,7 +52,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             gh release create $tag --title $tag --notes "QMeter Rust native release $tag"
           }
-          gh release upload $tag artifacts/qmeter.exe artifacts/qmeter-tray.exe artifacts/qmeter-windows-${{ github.ref_name }}.zip --clobber
+          gh release upload $tag artifacts/qmeter.exe artifacts/qmeter-tray.exe artifacts/qmeter-popup.exe artifacts/qmeter-windows-${{ github.ref_name }}.zip --clobber
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4

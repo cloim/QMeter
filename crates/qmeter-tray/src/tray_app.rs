@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::Path};
 
 use crate::notification_store::{
     NotificationStoreConfig, load_notification_state, save_notification_state,
@@ -160,7 +160,7 @@ fn run_platform_tray(
                     if event.id == quit_id {
                         event_loop.exit();
                     } else if event.id == open_id {
-                        show_popup("QMeter", &state.render_popup_text());
+                        open_popup_window(&log_config);
                     } else if event.id == refresh_id {
                         match refresh_state(
                             &mut state,
@@ -181,7 +181,7 @@ fn run_platform_tray(
                                 }
                                 show_notification_events(&events);
                                 last_refresh = Instant::now();
-                                show_popup("QMeter", &state.render_popup_text());
+                                open_popup_window(&log_config);
                             }
                             Err(err) => {
                                 let _ =
@@ -201,7 +201,7 @@ fn run_platform_tray(
                     | TrayIconEvent::DoubleClick {
                         button: MouseButton::Left,
                         ..
-                    } => show_popup("QMeter", &state.render_popup_text()),
+                    } => open_popup_window(&log_config),
                     _ => {}
                 },
                 _ => {}
@@ -210,6 +210,29 @@ fn run_platform_tray(
     }
 
     Ok(())
+}
+
+#[cfg(windows)]
+fn open_popup_window(log_config: &RuntimeLogConfig) {
+    let popup_path = match std::env::current_exe() {
+        Ok(current_exe) => popup_exe_path(&current_exe),
+        Err(err) => {
+            let _ = append_runtime_log(log_config, "popup-error", &err.to_string());
+            return;
+        }
+    };
+
+    if let Err(err) = std::process::Command::new(&popup_path).spawn() {
+        let _ = append_runtime_log(
+            log_config,
+            "popup-error",
+            &format!("{}: {err}", popup_path.display()),
+        );
+    }
+}
+
+fn popup_exe_path(current_exe: &Path) -> std::path::PathBuf {
+    current_exe.with_file_name(format!("qmeter-popup{}", std::env::consts::EXE_SUFFIX))
 }
 
 #[cfg(windows)]
@@ -273,6 +296,21 @@ fn render_settings_text(state: &TrayState) -> String {
         state.settings.notification.warning_percent,
         state.settings.notification.critical_percent
     )
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::popup_exe_path;
+    use std::path::Path;
+
+    #[test]
+    fn popup_exe_path_uses_sibling_binary() {
+        let current = Path::new(r"C:\tools\qmeter-tray.exe");
+        assert_eq!(
+            popup_exe_path(current),
+            Path::new(r"C:\tools\qmeter-popup.exe")
+        );
+    }
 }
 
 #[cfg(not(windows))]

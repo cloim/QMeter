@@ -28,7 +28,8 @@ cargo run -p qmeter-cli -- --json
 cargo run -p qmeter-cli -- --view table
 cargo run -p qmeter-cli -- --view graph
 cargo check -p qmeter-tray
-cargo run -p qmeter-tray
+cargo build -p qmeter-tray --bins
+cargo run -p qmeter-tray --bin qmeter-tray
 ```
 
 결정적 출력 확인은 fixture mode를 사용합니다.
@@ -64,7 +65,8 @@ cargo run -p qmeter-cli -- --json --providers claude,codex --refresh --debug
 ## Tray
 
 ```powershell
-cargo run -p qmeter-tray
+cargo build -p qmeter-tray --bins
+cargo run -p qmeter-tray --bin qmeter-tray
 ```
 
 트레이 앱 동작:
@@ -73,6 +75,7 @@ cargo run -p qmeter-tray
 - 런타임 로그: `%LOCALAPPDATA%\qmeter\tray-runtime.log`
 - 알림 상태: `%LOCALAPPDATA%\qmeter\notification-state.v1.json`
 - 메뉴: `Open QMeter`, `Refresh`, `Settings`, `Quit`
+- 사용량 카드와 수동 새로고침은 같은 폴더의 `qmeter-popup.exe` GUI 창으로 표시
 
 ## Provider 참고
 
@@ -90,6 +93,7 @@ cargo build --release --workspace
 
 - `target/release/qmeter.exe`
 - `target/release/qmeter-tray.exe`
+- `target/release/qmeter-popup.exe`
 
 태그 기반 GitHub Actions가 이 바이너리를 빌드하고 해당 GitHub release에 업로드합니다.
 

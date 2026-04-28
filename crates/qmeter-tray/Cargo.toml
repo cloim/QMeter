@@ -9,6 +9,10 @@ authors.workspace = true
 name = "qmeter-tray"
 path = "src/main.rs"
 
+[[bin]]
+name = "qmeter-popup"
+path = "src/popup_main.rs"
+
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 qmeter-core = { path = "../qmeter-core" }
@@ -18,6 +22,7 @@ serde_json = "1"
 thiserror = "2"
 
 [target.'cfg(windows)'.dependencies]
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow"] }
 rfd = "0.15"
 tray-icon = "0.21"
 windows = { version = "0.62", features = ["Win32_Foundation"] }
