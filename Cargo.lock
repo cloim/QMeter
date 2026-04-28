@@ -507,6 +507,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "qmeter-providers"
+version = "0.1.8"
+dependencies = [
+ "chrono",
+ "qmeter-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
