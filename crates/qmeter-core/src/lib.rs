@@ -1,3 +1,4 @@
+pub mod cache;
 pub mod output;
 pub mod snapshot;
 pub mod types;
