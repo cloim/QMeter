@@ -1,14 +1,8 @@
 use clap::{Parser, ValueEnum};
-use qmeter_core::cache::{
-    CacheConfig, CacheProviderEntry, CacheState, as_cache_rows, is_entry_fresh, load_cache,
-    save_cache,
-};
 use qmeter_core::output::{render_graph, render_table};
 use qmeter_core::snapshot::{CollectOptions, collect_fixture_snapshot, is_fixture_mode_from_env};
 use qmeter_core::types::{NormalizedSnapshot, ProviderId};
-use qmeter_providers::claude::ClaudeProvider;
-use qmeter_providers::codex::CodexProvider;
-use qmeter_providers::provider::{AcquireContext, Provider};
+use qmeter_providers::snapshot::collect_live_snapshot;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 enum ViewMode {
@@ -72,7 +66,13 @@ fn run(cli: Cli) -> Result<(NormalizedSnapshot, i32), String> {
     let snapshot = if is_fixture_mode_from_env() {
         collect_fixture_snapshot(&opts)
     } else {
-        collect_live_snapshot(&opts)
+        let live = collect_live_snapshot(&opts);
+        if cli.debug {
+            for (provider, debug) in &live.debug_messages {
+                eprintln!("[debug] {}: {debug}", provider.as_str());
+            }
+        }
+        live.snapshot
     };
     let exit_code = if !snapshot.rows.is_empty() && snapshot.errors.is_empty() {
         0
@@ -82,106 +82,6 @@ fn run(cli: Cli) -> Result<(NormalizedSnapshot, i32), String> {
         3
     };
     Ok((snapshot, exit_code))
-}
-
-fn collect_live_snapshot(opts: &CollectOptions) -> NormalizedSnapshot {
-    let cache_config = CacheConfig::from_env();
-    let mut cache =
-        load_cache(cache_config.clone()).unwrap_or_else(|_| CacheState::new(cache_config));
-    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    let mut snapshot = NormalizedSnapshot {
-        fetched_at: now.clone(),
-        rows: Vec::new(),
-        errors: Vec::new(),
-    };
-    let mut cache_dirty = false;
-
-    for provider in &opts.providers {
-        let cached = cache.providers.get(provider).cloned();
-        if !opts.refresh {
-            if let Some(entry) = cached.as_ref() {
-                if is_entry_fresh(entry, cache.config.ttl_ms, &now) {
-                    snapshot.rows.extend(as_cache_rows(
-                        &entry.rows,
-                        false,
-                        Some(&format!("cached at {}", entry.fetched_at)),
-                    ));
-                    continue;
-                }
-            }
-        }
-
-        match provider {
-            ProviderId::Codex => {
-                let result = CodexProvider::default().acquire(AcquireContext {
-                    refresh: opts.refresh,
-                    debug: opts.debug,
-                });
-                snapshot.errors.extend(result.errors);
-                if result.rows.is_empty() {
-                    if let Some(entry) = cached {
-                        snapshot.rows.extend(as_cache_rows(
-                            &entry.rows,
-                            true,
-                            Some(&format!("stale cache from {}", entry.fetched_at)),
-                        ));
-                    }
-                } else {
-                    cache.providers.insert(
-                        ProviderId::Codex,
-                        CacheProviderEntry {
-                            fetched_at: now.clone(),
-                            rows: result.rows.clone(),
-                        },
-                    );
-                    cache_dirty = true;
-                    snapshot.rows.extend(result.rows);
-                }
-                if opts.debug {
-                    if let Some(debug) = result.debug {
-                        eprintln!("[debug] codex: {debug}");
-                    }
-                }
-            }
-            ProviderId::Claude => {
-                let result = ClaudeProvider::default().acquire(AcquireContext {
-                    refresh: opts.refresh,
-                    debug: opts.debug,
-                });
-                snapshot.errors.extend(result.errors);
-                if result.rows.is_empty() {
-                    if let Some(entry) = cached {
-                        snapshot.rows.extend(as_cache_rows(
-                            &entry.rows,
-                            true,
-                            Some(&format!("stale cache from {}", entry.fetched_at)),
-                        ));
-                    }
-                } else {
-                    cache.providers.insert(
-                        ProviderId::Claude,
-                        CacheProviderEntry {
-                            fetched_at: now.clone(),
-                            rows: result.rows.clone(),
-                        },
-                    );
-                    cache_dirty = true;
-                    snapshot.rows.extend(result.rows);
-                }
-                if opts.debug {
-                    if let Some(debug) = result.debug {
-                        eprintln!("[debug] claude: {debug}");
-                    }
-                }
-            }
-        }
-    }
-
-    if cache_dirty {
-        let _ = save_cache(&cache);
-    }
-
-    snapshot
 }
 
 fn main() {
