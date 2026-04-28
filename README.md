@@ -16,9 +16,30 @@ QMeter is a Windows tray app + CLI that lets you check Claude Code/Codex usage a
   - Refresh interval
   - Card visibility (Claude/Codex)
 
+## Rust Native Port Status
+
+QMeter is being ported to a Rust-native Windows CLI + tray app. The Rust workspace is available under `crates/` while the legacy Node/Electron implementation remains for parity checks.
+
+Useful Rust commands:
+
+```bash
+cargo test --workspace
+cargo run -p qmeter-cli -- --json
+cargo run -p qmeter-cli -- --view table
+cargo run -p qmeter-cli -- --view graph
+cargo check -p qmeter-tray
+```
+
+Use fixture mode for deterministic local output:
+
+```bash
+USAGE_STATUS_FIXTURE=demo cargo run -p qmeter-cli -- --json
+```
+
 ## Requirements
 
 - Node.js 20+
+- Rust stable
 - Windows 11 (for tray app)
 
 ## Installation

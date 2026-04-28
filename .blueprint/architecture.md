@@ -2,6 +2,18 @@
 
 ## High-Level Layout
 
+QMeter is being ported from the original TypeScript/Electron implementation to a Rust workspace. During the migration, both implementations may exist in the tree:
+
+- Rust core: [`crates/qmeter-core`](../crates/qmeter-core)
+- Rust CLI: [`crates/qmeter-cli`](../crates/qmeter-cli)
+- Rust providers: [`crates/qmeter-providers`](../crates/qmeter-providers)
+- Rust tray shell: [`crates/qmeter-tray`](../crates/qmeter-tray)
+- Legacy TypeScript/Electron implementation: [`src`](../src)
+
+The Rust workspace is the forward path. The legacy implementation remains a parity oracle until provider acquisition, tray UI, packaging, and smoke checks are complete.
+
+## Legacy TypeScript Layout
+
 The codebase is organized around a shared snapshot pipeline with two adapters layered on top.
 
 - CLI entry: [`src/cli.ts`](D:\Code\Vibe\QMeter\src\cli.ts)

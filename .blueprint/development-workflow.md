@@ -2,6 +2,34 @@
 
 ## Primary Commands
 
+### Rust Workspace
+
+The Rust port is implemented as a Cargo workspace.
+
+- `cargo test --workspace`
+  Runs Rust unit and integration tests.
+- `cargo run -p qmeter-cli -- --json`
+  Runs the Rust CLI.
+- `cargo run -p qmeter-cli -- --view table`
+  Runs the Rust CLI table view.
+- `cargo run -p qmeter-cli -- --view graph`
+  Runs the Rust CLI graph view.
+- `cargo check -p qmeter-tray`
+  Checks the Windows native tray crate without launching the tray loop.
+- `cargo build --release --workspace`
+  Builds release binaries.
+
+For fixture-driven local checks:
+
+```powershell
+$env:USAGE_STATUS_FIXTURE='demo'
+cargo run -p qmeter-cli -- --json
+cargo run -p qmeter-cli -- --view table
+cargo run -p qmeter-cli -- --view graph
+```
+
+### Legacy Node/Electron
+
 Project commands are defined in [`package.json`](D:\Code\Vibe\QMeter\package.json).
 
 - `npm run build`
@@ -20,6 +48,14 @@ Project commands are defined in [`package.json`](D:\Code\Vibe\QMeter\package.jso
   Builds an unpacked directory artifact.
 
 ## Expected Verification Order
+
+For Rust changes, verify in this order:
+
+1. `cargo test --workspace`
+2. `cargo check -p qmeter-tray` when tray code changed
+3. Fixture CLI smoke commands when CLI/output changed
+
+The legacy verification order remains useful while TypeScript/Electron code is still present.
 
 For most code changes, verify in this order:
 
