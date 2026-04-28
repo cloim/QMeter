@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::{fs, io};
 
 use qmeter_core::notification_policy::NotificationState;
+use serde::Deserialize;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NotificationStoreConfig {
@@ -31,15 +32,26 @@ pub fn load_notification_state(
     config: &NotificationStoreConfig,
 ) -> io::Result<BTreeMap<String, NotificationState>> {
     match fs::read_to_string(&config.path) {
-        Ok(raw) => serde_json::from_str(&raw).map_err(|err| {
+        Ok(raw) => parse_notification_state(&raw),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(BTreeMap::new()),
+        Err(err) => Err(err),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct WrappedNotificationState {
+    items: BTreeMap<String, NotificationState>,
+}
+
+fn parse_notification_state(raw: &str) -> io::Result<BTreeMap<String, NotificationState>> {
+    serde_json::from_str(raw)
+        .or_else(|_| serde_json::from_str::<WrappedNotificationState>(raw).map(|state| state.items))
+        .map_err(|err| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("invalid notification state JSON: {err}"),
             )
-        }),
-        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(BTreeMap::new()),
-        Err(err) => Err(err),
-    }
+        })
 }
 
 pub fn save_notification_state(
@@ -95,5 +107,33 @@ mod tests {
         let loaded = load_notification_state(&cfg).expect("load state");
 
         assert_eq!(loaded, state);
+    }
+
+    #[test]
+    fn legacy_wrapped_notification_state_loads_items_map() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let cfg = NotificationStoreConfig {
+            path: dir.path().join("state.json"),
+        };
+        fs::write(
+            &cfg.path,
+            r#"{
+              "version": 1,
+              "items": {
+                "claude:claude:5h": {
+                  "eventKey": "claude:claude:5h",
+                  "level": "normal",
+                  "lastNotifiedAt": null
+                }
+              }
+            }"#,
+        )
+        .expect("write state");
+
+        let loaded = load_notification_state(&cfg).expect("load legacy state");
+
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded["claude:claude:5h"].event_key, "claude:claude:5h");
+        assert_eq!(loaded["claude:claude:5h"].level, AlertLevel::Normal);
     }
 }
