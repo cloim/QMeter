@@ -117,6 +117,7 @@ fn run_platform_tray(
         .build()?;
 
     let mut last_refresh = Instant::now();
+    let mut popup_anchor = None;
     let refresh_interval = Duration::from_millis(state.settings.refresh_interval_ms.max(5_000));
 
     #[allow(deprecated)]
@@ -160,7 +161,7 @@ fn run_platform_tray(
                     if event.id == quit_id {
                         event_loop.exit();
                     } else if event.id == open_id {
-                        open_popup_window(&log_config);
+                        open_popup_window(&log_config, popup_anchor);
                     } else if event.id == refresh_id {
                         match refresh_state(
                             &mut state,
@@ -181,7 +182,7 @@ fn run_platform_tray(
                                 }
                                 show_notification_events(&events);
                                 last_refresh = Instant::now();
-                                open_popup_window(&log_config);
+                                open_popup_window(&log_config, popup_anchor);
                             }
                             Err(err) => {
                                 let _ =
@@ -192,18 +193,25 @@ fn run_platform_tray(
                         show_popup("QMeter Settings", &render_settings_text(&state));
                     }
                 }
-                Event::UserEvent(UserEvent::Tray(event)) => match event {
-                    TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
+                Event::UserEvent(UserEvent::Tray(event)) => {
+                    if let Some(anchor) = tray_event_position(&event) {
+                        popup_anchor = Some(anchor);
                     }
-                    | TrayIconEvent::DoubleClick {
-                        button: MouseButton::Left,
-                        ..
-                    } => open_popup_window(&log_config),
-                    _ => {}
-                },
+                    match event {
+                        TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            position,
+                            ..
+                        } => open_popup_window(&log_config, Some((position.x, position.y))),
+                        TrayIconEvent::DoubleClick {
+                            button: MouseButton::Left,
+                            position,
+                            ..
+                        } => open_popup_window(&log_config, Some((position.x, position.y))),
+                        _ => {}
+                    }
+                }
                 _ => {}
             }
         })?;
@@ -213,7 +221,7 @@ fn run_platform_tray(
 }
 
 #[cfg(windows)]
-fn open_popup_window(log_config: &RuntimeLogConfig) {
+fn open_popup_window(log_config: &RuntimeLogConfig, anchor: Option<(f64, f64)>) {
     let popup_path = match std::env::current_exe() {
         Ok(current_exe) => popup_exe_path(&current_exe),
         Err(err) => {
@@ -222,7 +230,14 @@ fn open_popup_window(log_config: &RuntimeLogConfig) {
         }
     };
 
-    if let Err(err) = std::process::Command::new(&popup_path).spawn() {
+    let mut command = std::process::Command::new(&popup_path);
+    if let Some((x, y)) = anchor {
+        command
+            .env("QMETER_POPUP_ANCHOR_X", x.to_string())
+            .env("QMETER_POPUP_ANCHOR_Y", y.to_string());
+    }
+
+    if let Err(err) = command.spawn() {
         let _ = append_runtime_log(
             log_config,
             "popup-error",
@@ -233,6 +248,18 @@ fn open_popup_window(log_config: &RuntimeLogConfig) {
 
 fn popup_exe_path(current_exe: &Path) -> std::path::PathBuf {
     current_exe.with_file_name(format!("qmeter-popup{}", std::env::consts::EXE_SUFFIX))
+}
+
+#[cfg(windows)]
+fn tray_event_position(event: &tray_icon::TrayIconEvent) -> Option<(f64, f64)> {
+    match event {
+        tray_icon::TrayIconEvent::Click { position, .. }
+        | tray_icon::TrayIconEvent::DoubleClick { position, .. }
+        | tray_icon::TrayIconEvent::Enter { position, .. }
+        | tray_icon::TrayIconEvent::Move { position, .. }
+        | tray_icon::TrayIconEvent::Leave { position, .. } => Some((position.x, position.y)),
+        _ => None,
+    }
 }
 
 #[cfg(windows)]
