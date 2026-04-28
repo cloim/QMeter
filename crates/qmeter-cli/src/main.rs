@@ -5,10 +5,10 @@ use qmeter_core::cache::{
 };
 use qmeter_core::output::{render_graph, render_table};
 use qmeter_core::snapshot::{
-    collect_fixture_snapshot, collect_unimplemented_snapshot, is_fixture_mode_from_env,
-    CollectOptions,
+    collect_fixture_snapshot, is_fixture_mode_from_env, CollectOptions,
 };
 use qmeter_core::types::{NormalizedSnapshot, ProviderId};
+use qmeter_providers::claude::ClaudeProvider;
 use qmeter_providers::codex::CodexProvider;
 use qmeter_providers::provider::{AcquireContext, Provider};
 
@@ -145,18 +145,34 @@ fn collect_live_snapshot(opts: &CollectOptions) -> NormalizedSnapshot {
                 }
             }
             ProviderId::Claude => {
-                let fallback = collect_unimplemented_snapshot(&CollectOptions {
+                let result = ClaudeProvider::default().acquire(AcquireContext {
                     refresh: opts.refresh,
                     debug: opts.debug,
-                    providers: vec![ProviderId::Claude],
                 });
-                snapshot.errors.extend(fallback.errors);
-                if let Some(entry) = cached {
-                    snapshot.rows.extend(as_cache_rows(
-                        &entry.rows,
-                        true,
-                        Some(&format!("stale cache from {}", entry.fetched_at)),
-                    ));
+                snapshot.errors.extend(result.errors);
+                if result.rows.is_empty() {
+                    if let Some(entry) = cached {
+                        snapshot.rows.extend(as_cache_rows(
+                            &entry.rows,
+                            true,
+                            Some(&format!("stale cache from {}", entry.fetched_at)),
+                        ));
+                    }
+                } else {
+                    cache.providers.insert(
+                        ProviderId::Claude,
+                        CacheProviderEntry {
+                            fetched_at: now.clone(),
+                            rows: result.rows.clone(),
+                        },
+                    );
+                    cache_dirty = true;
+                    snapshot.rows.extend(result.rows);
+                }
+                if opts.debug {
+                    if let Some(debug) = result.debug {
+                        eprintln!("[debug] claude: {debug}");
+                    }
                 }
             }
         }

@@ -94,7 +94,7 @@ fn non_fixture_mode_reports_provider_gap_instead_of_demo_rows() {
     let value: Value = serde_json::from_slice(&output).expect("stdout should be JSON");
     assert_eq!(value["rows"].as_array().expect("rows array").len(), 0);
     assert_eq!(value["errors"][0]["provider"], "claude");
-    assert_eq!(value["errors"][0]["type"], "acquire-failed");
+    assert_eq!(value["errors"][0]["type"], "tty-unavailable");
 }
 
 #[test]
