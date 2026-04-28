@@ -1,4 +1,8 @@
 use clap::{Parser, ValueEnum};
+use qmeter_core::cache::{
+    as_cache_rows, is_entry_fresh, load_cache, save_cache, CacheConfig, CacheProviderEntry,
+    CacheState,
+};
 use qmeter_core::output::{render_graph, render_table};
 use qmeter_core::snapshot::{
     collect_fixture_snapshot, collect_unimplemented_snapshot, is_fixture_mode_from_env,
@@ -83,21 +87,57 @@ fn run(cli: Cli) -> Result<(NormalizedSnapshot, i32), String> {
 }
 
 fn collect_live_snapshot(opts: &CollectOptions) -> NormalizedSnapshot {
+    let cache_config = CacheConfig::from_env();
+    let mut cache = load_cache(cache_config.clone()).unwrap_or_else(|_| CacheState::new(cache_config));
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let mut snapshot = NormalizedSnapshot {
-        fetched_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        fetched_at: now.clone(),
         rows: Vec::new(),
         errors: Vec::new(),
     };
+    let mut cache_dirty = false;
 
     for provider in &opts.providers {
+        let cached = cache.providers.get(provider).cloned();
+        if !opts.refresh {
+            if let Some(entry) = cached.as_ref() {
+                if is_entry_fresh(entry, cache.config.ttl_ms, &now) {
+                    snapshot.rows.extend(as_cache_rows(
+                        &entry.rows,
+                        false,
+                        Some(&format!("cached at {}", entry.fetched_at)),
+                    ));
+                    continue;
+                }
+            }
+        }
+
         match provider {
             ProviderId::Codex => {
                 let result = CodexProvider::default().acquire(AcquireContext {
                     refresh: opts.refresh,
                     debug: opts.debug,
                 });
-                snapshot.rows.extend(result.rows);
                 snapshot.errors.extend(result.errors);
+                if result.rows.is_empty() {
+                    if let Some(entry) = cached {
+                        snapshot.rows.extend(as_cache_rows(
+                            &entry.rows,
+                            true,
+                            Some(&format!("stale cache from {}", entry.fetched_at)),
+                        ));
+                    }
+                } else {
+                    cache.providers.insert(
+                        ProviderId::Codex,
+                        CacheProviderEntry {
+                            fetched_at: now.clone(),
+                            rows: result.rows.clone(),
+                        },
+                    );
+                    cache_dirty = true;
+                    snapshot.rows.extend(result.rows);
+                }
                 if opts.debug {
                     if let Some(debug) = result.debug {
                         eprintln!("[debug] codex: {debug}");
@@ -111,8 +151,19 @@ fn collect_live_snapshot(opts: &CollectOptions) -> NormalizedSnapshot {
                     providers: vec![ProviderId::Claude],
                 });
                 snapshot.errors.extend(fallback.errors);
+                if let Some(entry) = cached {
+                    snapshot.rows.extend(as_cache_rows(
+                        &entry.rows,
+                        true,
+                        Some(&format!("stale cache from {}", entry.fetched_at)),
+                    ));
+                }
             }
         }
+    }
+
+    if cache_dirty {
+        let _ = save_cache(&cache);
     }
 
     snapshot

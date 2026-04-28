@@ -1190,6 +1190,7 @@ dependencies = [
  "qmeter-core",
  "qmeter-providers",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
