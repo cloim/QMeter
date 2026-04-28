@@ -7,6 +7,15 @@ pub enum ProviderId {
     Codex,
 }
 
+impl ProviderId {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Claude => "claude",
+            Self::Codex => "codex",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SourceKind {
@@ -15,12 +24,36 @@ pub enum SourceKind {
     Cache,
 }
 
+impl SourceKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Structured => "structured",
+            Self::Parsed => "parsed",
+            Self::Cache => "cache",
+        }
+    }
+
+    pub fn is_cache(self) -> bool {
+        matches!(self, Self::Cache)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Confidence {
     High,
     Medium,
     Low,
+}
+
+impl Confidence {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::High => "high",
+            Self::Medium => "medium",
+            Self::Low => "low",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
