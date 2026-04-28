@@ -10,8 +10,10 @@ name = "qmeter"
 path = "src/main.rs"
 
 [dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 clap = { version = "4", features = ["derive"] }
 qmeter-core = { path = "../qmeter-core" }
+qmeter-providers = { path = "../qmeter-providers" }
 serde_json = "1"
 
 [dev-dependencies]

@@ -5,6 +5,8 @@ use qmeter_core::snapshot::{
     CollectOptions,
 };
 use qmeter_core::types::{NormalizedSnapshot, ProviderId};
+use qmeter_providers::codex::CodexProvider;
+use qmeter_providers::provider::{AcquireContext, Provider};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 enum ViewMode {
@@ -68,7 +70,7 @@ fn run(cli: Cli) -> Result<(NormalizedSnapshot, i32), String> {
     let snapshot = if is_fixture_mode_from_env() {
         collect_fixture_snapshot(&opts)
     } else {
-        collect_unimplemented_snapshot(&opts)
+        collect_live_snapshot(&opts)
     };
     let exit_code = if !snapshot.rows.is_empty() && snapshot.errors.is_empty() {
         0
@@ -78,6 +80,42 @@ fn run(cli: Cli) -> Result<(NormalizedSnapshot, i32), String> {
         3
     };
     Ok((snapshot, exit_code))
+}
+
+fn collect_live_snapshot(opts: &CollectOptions) -> NormalizedSnapshot {
+    let mut snapshot = NormalizedSnapshot {
+        fetched_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        rows: Vec::new(),
+        errors: Vec::new(),
+    };
+
+    for provider in &opts.providers {
+        match provider {
+            ProviderId::Codex => {
+                let result = CodexProvider::default().acquire(AcquireContext {
+                    refresh: opts.refresh,
+                    debug: opts.debug,
+                });
+                snapshot.rows.extend(result.rows);
+                snapshot.errors.extend(result.errors);
+                if opts.debug {
+                    if let Some(debug) = result.debug {
+                        eprintln!("[debug] codex: {debug}");
+                    }
+                }
+            }
+            ProviderId::Claude => {
+                let fallback = collect_unimplemented_snapshot(&CollectOptions {
+                    refresh: opts.refresh,
+                    debug: opts.debug,
+                    providers: vec![ProviderId::Claude],
+                });
+                snapshot.errors.extend(fallback.errors);
+            }
+        }
+    }
+
+    snapshot
 }
 
 fn main() {

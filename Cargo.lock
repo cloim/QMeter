@@ -1184,9 +1184,11 @@ name = "qmeter-cli"
 version = "0.1.8"
 dependencies = [
  "assert_cmd",
+ "chrono",
  "clap",
  "predicates",
  "qmeter-core",
+ "qmeter-providers",
  "serde_json",
 ]
 

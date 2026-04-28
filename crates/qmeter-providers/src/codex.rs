@@ -1,7 +1,15 @@
 use chrono::{DateTime, SecondsFormat, Utc};
-use qmeter_core::types::{Confidence, NormalizedRow, ProviderId, SourceKind};
+use qmeter_core::types::{
+    Confidence, NormalizedError, NormalizedErrorType, NormalizedRow, ProviderId, SourceKind,
+};
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{json, Value};
+use std::io::{BufRead, BufReader, Write};
+use std::process::{Command, Stdio};
+use std::sync::mpsc;
+use std::time::Duration;
+
+use crate::provider::{AcquireContext, Provider, ProviderResult};
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -40,6 +48,234 @@ pub struct CodexRateLimitDebug {
 pub struct CodexRateLimitsResult {
     pub rows: Vec<NormalizedRow>,
     pub debug: CodexRateLimitDebug,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CodexProviderConfig {
+    pub codex_command: String,
+    pub timeout: Duration,
+}
+
+impl Default for CodexProviderConfig {
+    fn default() -> Self {
+        Self {
+            codex_command: std::env::var("USAGE_STATUS_CODEX_COMMAND")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| "codex".to_string()),
+            timeout: Duration::from_secs(10),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct CodexProvider {
+    config: CodexProviderConfig,
+}
+
+impl CodexProvider {
+    pub fn new(config: CodexProviderConfig) -> Self {
+        Self { config }
+    }
+
+    pub fn acquire_with_runner(
+        &self,
+        runner: &dyn AppServerRunner,
+        ctx: AcquireContext,
+    ) -> ProviderResult {
+        match runner.exchange(
+            &self.config.codex_command,
+            &app_server_requests(),
+            self.config.timeout,
+        ) {
+            Ok(value) => match parse_rate_limits_response(value) {
+                Ok(parsed) => ProviderResult {
+                    rows: parsed.rows,
+                    errors: Vec::new(),
+                    debug: ctx.debug.then(|| {
+                        json!({
+                            "spawnCommand": app_server_spawn_command(&self.config.codex_command),
+                            "limitId": parsed.debug.limit_id,
+                            "limitName": parsed.debug.limit_name,
+                            "planType": parsed.debug.plan_type,
+                            "hadRateLimitsByLimitId": parsed.debug.had_rate_limits_by_limit_id
+                        })
+                    }),
+                },
+                Err(err) => ProviderResult {
+                    rows: Vec::new(),
+                    errors: vec![normalized_error(
+                        NormalizedErrorType::InvalidResponse,
+                        err.to_string(),
+                    )],
+                    debug: None,
+                },
+            },
+            Err(message) => ProviderResult {
+                rows: Vec::new(),
+                errors: vec![normalized_error(error_type_for_message(&message), message)],
+                debug: None,
+            },
+        }
+    }
+}
+
+impl Provider for CodexProvider {
+    fn id(&self) -> ProviderId {
+        ProviderId::Codex
+    }
+
+    fn acquire(&self, ctx: AcquireContext) -> ProviderResult {
+        self.acquire_with_runner(&ProcessAppServerRunner, ctx)
+    }
+}
+
+pub trait AppServerRunner {
+    fn exchange(
+        &self,
+        command: &str,
+        requests: &[Value],
+        timeout: Duration,
+    ) -> Result<Value, String>;
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ProcessAppServerRunner;
+
+impl AppServerRunner for ProcessAppServerRunner {
+    fn exchange(
+        &self,
+        command: &str,
+        requests: &[Value],
+        timeout: Duration,
+    ) -> Result<Value, String> {
+        let mut child = spawn_app_server(command).map_err(|err| err.to_string())?;
+        let mut stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| "codex app-server stdin unavailable".to_string())?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| "codex app-server stdout unavailable".to_string())?;
+
+        for request in requests {
+            writeln!(stdin, "{request}").map_err(|err| err.to_string())?;
+        }
+        stdin.flush().map_err(|err| err.to_string())?;
+
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let result = read_rate_limit_result(stdout);
+            let _ = tx.send(result);
+        });
+
+        let result = rx
+            .recv_timeout(timeout)
+            .map_err(|_| format!("codex app-server timed out after {}ms", timeout.as_millis()));
+
+        let _ = child.kill();
+        let _ = child.wait();
+
+        result?
+    }
+}
+
+fn spawn_app_server(command: &str) -> std::io::Result<std::process::Child> {
+    let command = if cfg!(windows) && command == "codex" {
+        "codex.cmd"
+    } else {
+        command
+    };
+
+    Command::new(command)
+        .arg("app-server")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+}
+
+fn read_rate_limit_result(stdout: std::process::ChildStdout) -> Result<Value, String> {
+    for line in BufReader::new(stdout).lines() {
+        let line = line.map_err(|err| err.to_string())?;
+        let Ok(value) = serde_json::from_str::<Value>(&line) else {
+            continue;
+        };
+        if value.get("id") == Some(&json!(1)) && value.get("error").is_some() {
+            return Err(format!(
+                "codex initialize failed: {}",
+                value["error"]["message"].as_str().unwrap_or("unknown error")
+            ));
+        }
+        if value.get("id") == Some(&json!(2)) {
+            if value.get("error").is_some() {
+                return Err(format!(
+                    "codex account/rateLimits/read failed: {}",
+                    value["error"]["message"].as_str().unwrap_or("unknown error")
+                ));
+            }
+            return value
+                .get("result")
+                .cloned()
+                .ok_or_else(|| "codex account/rateLimits/read missing result".to_string());
+        }
+    }
+
+    Err("codex app-server exited before rate limits response".to_string())
+}
+
+fn app_server_requests() -> [Value; 3] {
+    [
+        json!({
+            "method": "initialize",
+            "id": 1,
+            "params": {
+                "clientInfo": {
+                    "name": "qmeter",
+                    "title": "QMeter",
+                    "version": env!("CARGO_PKG_VERSION")
+                }
+            }
+        }),
+        json!({ "method": "initialized", "params": {} }),
+        json!({ "method": "account/rateLimits/read", "id": 2 }),
+    ]
+}
+
+fn app_server_spawn_command(command: &str) -> String {
+    let command = if cfg!(windows) && command == "codex" {
+        "codex.cmd"
+    } else {
+        command
+    };
+    format!("{command} app-server")
+}
+
+fn normalized_error(error_type: NormalizedErrorType, message: String) -> NormalizedError {
+    NormalizedError {
+        provider: ProviderId::Codex,
+        error_type,
+        message,
+        actionable: Some("run `codex` once and ensure you are logged in".to_string()),
+    }
+}
+
+fn error_type_for_message(message: &str) -> NormalizedErrorType {
+    let lowered = message.to_ascii_lowercase();
+    if lowered.contains("not found")
+        || lowered.contains("enoent")
+        || lowered.contains("cannot find")
+        || lowered.contains("os error 2")
+    {
+        NormalizedErrorType::NotInstalled
+    } else if lowered.contains("timed out") || lowered.contains("timeout") {
+        NormalizedErrorType::Timeout
+    } else if lowered.contains("unauthorized") || lowered.contains("forbidden") {
+        NormalizedErrorType::AuthRequired
+    } else {
+        NormalizedErrorType::AcquireFailed
+    }
 }
 
 pub fn parse_rate_limits_response(value: Value) -> Result<CodexRateLimitsResult, serde_json::Error> {

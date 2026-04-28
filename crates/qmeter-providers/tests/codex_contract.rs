@@ -1,4 +1,12 @@
-use qmeter_providers::codex::parse_rate_limits_response;
+use std::cell::RefCell;
+use std::time::Duration;
+
+use qmeter_core::types::NormalizedErrorType;
+use qmeter_providers::codex::{
+    parse_rate_limits_response, AppServerRunner, CodexProvider, CodexProviderConfig,
+};
+use qmeter_providers::provider::AcquireContext;
+use serde_json::Value;
 
 #[test]
 fn parses_codex_rate_limits_by_limit_id_when_available() {
@@ -50,4 +58,77 @@ fn parses_top_level_codex_rate_limits_without_by_limit_id() {
     assert_eq!(result.rows[0].window, "codex:1d");
     assert_eq!(result.rows[0].used_percent, Some(55.0));
     assert_eq!(result.rows[0].reset_at, None);
+}
+
+struct FakeRunner {
+    requests: RefCell<Vec<Value>>,
+    result: Result<Value, String>,
+}
+
+impl AppServerRunner for FakeRunner {
+    fn exchange(
+        &self,
+        _command: &str,
+        requests: &[Value],
+        _timeout: Duration,
+    ) -> Result<Value, String> {
+        self.requests.borrow_mut().extend_from_slice(requests);
+        self.result.clone()
+    }
+}
+
+#[test]
+fn codex_provider_sends_json_rpc_handshake_and_returns_rows() {
+    let runner = FakeRunner {
+        requests: RefCell::new(Vec::new()),
+        result: Ok(serde_json::json!({
+            "rateLimits": {
+                "limitId": "codex",
+                "limitName": "Codex",
+                "planType": "pro",
+                "primary": { "usedPercent": 81, "windowDurationMins": 300, "resetsAt": null },
+                "secondary": null
+            }
+        })),
+    };
+    let provider = CodexProvider::new(CodexProviderConfig {
+        codex_command: "codex-test".to_string(),
+        timeout: Duration::from_secs(1),
+    });
+
+    let result = provider.acquire_with_runner(&runner, AcquireContext {
+        refresh: true,
+        debug: true,
+    });
+
+    assert_eq!(result.errors, vec![]);
+    assert_eq!(result.rows.len(), 1);
+    assert_eq!(result.rows[0].window, "codex:5h");
+
+    let requests = runner.requests.borrow();
+    assert_eq!(requests[0]["method"], "initialize");
+    assert_eq!(requests[1]["method"], "initialized");
+    assert_eq!(requests[2]["method"], "account/rateLimits/read");
+}
+
+#[test]
+fn codex_provider_maps_runner_failure_to_normalized_error() {
+    let runner = FakeRunner {
+        requests: RefCell::new(Vec::new()),
+        result: Err("codex app-server timed out after 1000ms".to_string()),
+    };
+    let provider = CodexProvider::new(CodexProviderConfig {
+        codex_command: "codex-test".to_string(),
+        timeout: Duration::from_secs(1),
+    });
+
+    let result = provider.acquire_with_runner(&runner, AcquireContext {
+        refresh: true,
+        debug: false,
+    });
+
+    assert_eq!(result.rows, vec![]);
+    assert_eq!(result.errors.len(), 1);
+    assert_eq!(result.errors[0].provider.as_str(), "codex");
+    assert_eq!(result.errors[0].error_type, NormalizedErrorType::Timeout);
 }

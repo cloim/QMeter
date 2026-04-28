@@ -80,6 +80,27 @@ fn selected_provider_filters_rows() {
 fn non_fixture_mode_reports_provider_gap_instead_of_demo_rows() {
     let output = qmeter()
         .env_remove("USAGE_STATUS_FIXTURE")
+        .args(["--json", "--providers", "claude"])
+        .assert()
+        .code(3)
+        .get_output()
+        .stdout
+        .clone();
+
+    let value: Value = serde_json::from_slice(&output).expect("stdout should be JSON");
+    assert_eq!(value["rows"].as_array().expect("rows array").len(), 0);
+    assert_eq!(value["errors"][0]["provider"], "claude");
+    assert_eq!(value["errors"][0]["type"], "acquire-failed");
+}
+
+#[test]
+fn non_fixture_codex_uses_live_provider_path() {
+    let output = qmeter()
+        .env_remove("USAGE_STATUS_FIXTURE")
+        .env(
+            "USAGE_STATUS_CODEX_COMMAND",
+            "definitely-missing-qmeter-codex-command.exe",
+        )
         .args(["--json", "--providers", "codex"])
         .assert()
         .code(3)
@@ -90,5 +111,5 @@ fn non_fixture_mode_reports_provider_gap_instead_of_demo_rows() {
     let value: Value = serde_json::from_slice(&output).expect("stdout should be JSON");
     assert_eq!(value["rows"].as_array().expect("rows array").len(), 0);
     assert_eq!(value["errors"][0]["provider"], "codex");
-    assert_eq!(value["errors"][0]["type"], "acquire-failed");
+    assert_eq!(value["errors"][0]["type"], "not-installed");
 }
