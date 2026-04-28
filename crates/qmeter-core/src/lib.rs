@@ -1,5 +1,8 @@
 pub mod cache;
+pub mod notification_policy;
 pub mod output;
+pub mod scheduler;
+pub mod settings;
 pub mod snapshot;
 pub mod types;
 
