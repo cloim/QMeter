@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use qmeter_core::types::NormalizedErrorType;
 use qmeter_providers::codex::{
-    parse_rate_limits_response, AppServerRunner, CodexProvider, CodexProviderConfig,
+    AppServerRunner, CodexProvider, CodexProviderConfig, parse_rate_limits_response,
 };
 use qmeter_providers::provider::AcquireContext;
 use serde_json::Value;
@@ -96,10 +96,13 @@ fn codex_provider_sends_json_rpc_handshake_and_returns_rows() {
         timeout: Duration::from_secs(1),
     });
 
-    let result = provider.acquire_with_runner(&runner, AcquireContext {
-        refresh: true,
-        debug: true,
-    });
+    let result = provider.acquire_with_runner(
+        &runner,
+        AcquireContext {
+            refresh: true,
+            debug: true,
+        },
+    );
 
     assert_eq!(result.errors, vec![]);
     assert_eq!(result.rows.len(), 1);
@@ -122,10 +125,13 @@ fn codex_provider_maps_runner_failure_to_normalized_error() {
         timeout: Duration::from_secs(1),
     });
 
-    let result = provider.acquire_with_runner(&runner, AcquireContext {
-        refresh: true,
-        debug: false,
-    });
+    let result = provider.acquire_with_runner(
+        &runner,
+        AcquireContext {
+            refresh: true,
+            debug: false,
+        },
+    );
 
     assert_eq!(result.rows, vec![]);
     assert_eq!(result.errors.len(), 1);

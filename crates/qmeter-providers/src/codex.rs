@@ -3,7 +3,7 @@ use qmeter_core::types::{
     Confidence, NormalizedError, NormalizedErrorType, NormalizedRow, ProviderId, SourceKind,
 };
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
@@ -205,14 +205,18 @@ fn read_rate_limit_result(stdout: std::process::ChildStdout) -> Result<Value, St
         if value.get("id") == Some(&json!(1)) && value.get("error").is_some() {
             return Err(format!(
                 "codex initialize failed: {}",
-                value["error"]["message"].as_str().unwrap_or("unknown error")
+                value["error"]["message"]
+                    .as_str()
+                    .unwrap_or("unknown error")
             ));
         }
         if value.get("id") == Some(&json!(2)) {
             if value.get("error").is_some() {
                 return Err(format!(
                     "codex account/rateLimits/read failed: {}",
-                    value["error"]["message"].as_str().unwrap_or("unknown error")
+                    value["error"]["message"]
+                        .as_str()
+                        .unwrap_or("unknown error")
                 ));
             }
             return value
@@ -278,7 +282,9 @@ fn error_type_for_message(message: &str) -> NormalizedErrorType {
     }
 }
 
-pub fn parse_rate_limits_response(value: Value) -> Result<CodexRateLimitsResult, serde_json::Error> {
+pub fn parse_rate_limits_response(
+    value: Value,
+) -> Result<CodexRateLimitsResult, serde_json::Error> {
     let parsed: GetAccountRateLimitsResponse = serde_json::from_value(value)?;
     let by_limit_id = parsed.rate_limits_by_limit_id;
     let had_rate_limits_by_limit_id = by_limit_id.is_some();

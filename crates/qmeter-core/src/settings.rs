@@ -10,7 +10,9 @@ pub struct TraySettingsConfig {
 impl TraySettingsConfig {
     pub fn from_env() -> Self {
         Self::from_values(
-            std::env::var("USAGE_STATUS_TRAY_SETTINGS_PATH").ok().as_deref(),
+            std::env::var("USAGE_STATUS_TRAY_SETTINGS_PATH")
+                .ok()
+                .as_deref(),
             std::env::var("APPDATA").ok().as_deref(),
             std::env::var("XDG_CONFIG_HOME").ok().as_deref(),
             std::env::var("USERPROFILE").ok().map(PathBuf::from),
@@ -104,4 +106,3 @@ pub fn default_tray_settings() -> TraySettings {
         },
     }
 }
-

@@ -63,15 +63,19 @@ That keeps the core agnostic to provider internals.
 
 ### Claude Provider
 
-[`src/providers/claudeProvider.ts`](D:\Code\Vibe\QMeter\src\providers\claudeProvider.ts) uses `node-pty` to drive the Claude TUI and parse `/usage` output.
+The Rust Claude provider in [`crates/qmeter-providers/src/claude.rs`](../crates/qmeter-providers/src/claude.rs) uses the Claude Code OAuth credential to call Anthropic's usage endpoint directly.
 
 Important implementation facts:
 
-- On Windows it defaults to `C:/Program Files/Git/usr/bin/bash.exe`
-- It launches Claude in a PTY, sends `/usage`, captures screen text, and parses the rendered output
-- Failure modes are mapped into normalized error types such as `not-installed`, `tty-unavailable`, `timeout`, and `acquire-failed`
+- The live Rust path reads `claudeAiOauth.accessToken` from Claude Code credentials.
+- On Windows and Linux it reads `~/.claude/.credentials.json`.
+- On macOS it first tries the `Claude Code-credentials` Keychain item, then falls back to the credentials file.
+- It calls `https://api.anthropic.com/api/oauth/usage` with `Authorization: Bearer <token>` and `anthropic-beta: oauth-2025-04-20`.
+- It maps `five_hour`, `seven_day`, and `seven_day_sonnet` windows into structured normalized rows.
+- The old `/usage` screen parser remains isolated behind a testable runner boundary, but it is no longer the default live Rust acquisition path.
+- Failure modes are mapped into normalized error types such as `auth-required`, `timeout`, `invalid-response`, and `acquire-failed`.
 
-This provider is inherently more brittle than Codex because it depends on TUI output parsing.
+The legacy TypeScript provider still uses `node-pty` to drive the Claude TUI and parse `/usage` output until it is retired.
 
 ### Codex Provider
 

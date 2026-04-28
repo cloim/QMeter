@@ -85,5 +85,8 @@ fn returns_parse_failed_error_when_no_rows_found() {
 
     assert_eq!(parsed.rows.len(), 0);
     assert_eq!(parsed.errors.len(), 1);
-    assert_eq!(parsed.errors[0].error_type, NormalizedErrorType::ParseFailed);
+    assert_eq!(
+        parsed.errors[0].error_type,
+        NormalizedErrorType::ParseFailed
+    );
 }

@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
 use qmeter_core::cache::{
-    as_cache_rows, is_entry_fresh, load_cache, save_cache, CacheConfig, CacheProviderEntry,
-    CacheState,
+    CacheConfig, CacheProviderEntry, CacheState, as_cache_rows, is_entry_fresh, load_cache,
+    save_cache,
 };
 use qmeter_core::types::{Confidence, NormalizedRow, ProviderId, SourceKind};
 
@@ -94,5 +94,8 @@ fn cache_round_trip_preserves_provider_entries() {
     save_cache(&state).expect("save cache");
     let loaded = load_cache(cfg).expect("load cache");
 
-    assert_eq!(loaded.providers[&ProviderId::Codex].rows[0].window, "codex:fixture");
+    assert_eq!(
+        loaded.providers[&ProviderId::Codex].rows[0].window,
+        "codex:fixture"
+    );
 }

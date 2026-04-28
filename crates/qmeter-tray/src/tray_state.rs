@@ -1,5 +1,5 @@
-use qmeter_core::snapshot::{collect_fixture_snapshot, CollectOptions};
 use qmeter_core::output::render_graph;
+use qmeter_core::snapshot::{CollectOptions, collect_fixture_snapshot};
 use qmeter_core::types::{NormalizedSnapshot, ProviderId};
 
 #[derive(Clone, Debug, PartialEq)]

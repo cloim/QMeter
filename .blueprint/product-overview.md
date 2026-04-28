@@ -7,17 +7,19 @@ QMeter is a Windows-focused usage monitor for Claude Code and Codex. It exposes 
 - A CLI command, `qmeter`, for scripts and terminal use.
 - A Windows tray app that shows a popup UI, background refresh, notifications, and packaged-app update checks.
 
-The repository currently ships both surfaces from one TypeScript codebase.
+The repository currently carries the legacy TypeScript/Electron app and an in-progress Rust workspace that is the forward path for native binaries.
 
 ## Supported Runtime
 
-- Node.js 20+
+- Rust stable for the native workspace
+- Node.js 20+ for the legacy TypeScript/Electron implementation
 - Windows 11 for the tray app
 - Electron for packaged tray builds
 
 The CLI can still run outside the tray app, but several provider assumptions are Windows-oriented:
 
-- Claude collection expects a PTY-capable environment and, on Windows, defaults to Git Bash.
+- Rust Claude collection expects Claude Code OAuth credentials and calls the Anthropic OAuth usage endpoint directly.
+- Legacy TypeScript Claude collection expects a PTY-capable environment and, on Windows, defaults to Git Bash.
 - Codex collection relies on the Codex CLI/app-server path being locally available.
 
 ## Core User Flows

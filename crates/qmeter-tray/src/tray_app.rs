@@ -1,4 +1,4 @@
-use crate::runtime_log::{append_runtime_log, RuntimeLogConfig};
+use crate::runtime_log::{RuntimeLogConfig, append_runtime_log};
 use crate::tray_state::TrayState;
 
 pub fn run_tray_app() -> Result<(), Box<dyn std::error::Error>> {
@@ -26,8 +26,8 @@ pub fn run_tray_app() -> Result<(), Box<dyn std::error::Error>> {
 fn run_platform_tray() -> Result<(), Box<dyn std::error::Error>> {
     use std::time::Duration;
     use tray_icon::{
-        menu::{Menu, MenuEvent, MenuItem},
         Icon, TrayIconBuilder,
+        menu::{Menu, MenuEvent, MenuItem},
     };
 
     let menu = Menu::new();

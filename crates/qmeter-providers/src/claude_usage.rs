@@ -17,7 +17,9 @@ pub fn clean_claude_screen_text(raw: &str) -> String {
 
 fn ansi_regex() -> &'static Regex {
     static ANSI: OnceLock<Regex> = OnceLock::new();
-    ANSI.get_or_init(|| Regex::new(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07]*(?:\x07|\x1b\\)").unwrap())
+    ANSI.get_or_init(|| {
+        Regex::new(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07]*(?:\x07|\x1b\\)").unwrap()
+    })
 }
 
 fn strip_ansi(raw: &str) -> String {
@@ -67,11 +69,7 @@ pub fn parse_claude_usage_from_screen(screen_text: &str) -> ClaudeUsageParseResu
     let mut rows = Vec::new();
     let mut errors = Vec::new();
 
-    if let Some(row) = parse_section(
-        screen_text,
-        "Current session",
-        "claude:session",
-    ) {
+    if let Some(row) = parse_section(screen_text, "Current session", "claude:session") {
         rows.push(row);
     }
 

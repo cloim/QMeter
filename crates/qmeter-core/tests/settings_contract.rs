@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use qmeter_core::settings::{default_tray_settings, TraySettingsConfig};
+use qmeter_core::settings::{TraySettingsConfig, default_tray_settings};
 
 #[test]
 fn default_settings_match_current_tray_defaults() {

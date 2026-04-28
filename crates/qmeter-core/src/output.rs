@@ -71,7 +71,10 @@ fn make_bar(percent: f64, width: usize) -> String {
 }
 
 pub fn render_graph(snapshot: &NormalizedSnapshot) -> String {
-    let mut lines = vec![format!("Usage Snapshot @ {}", snapshot.fetched_at), String::new()];
+    let mut lines = vec![
+        format!("Usage Snapshot @ {}", snapshot.fetched_at),
+        String::new(),
+    ];
 
     if snapshot.rows.is_empty() {
         lines.push("(no rows)".to_string());
@@ -155,7 +158,10 @@ pub fn render_table(snapshot: &NormalizedSnapshot) -> String {
                     pad_right(&clamp_text(row.provider.as_str(), cols.0), cols.0),
                     pad_right(&clamp_text(&row.window, cols.1), cols.1),
                     pad_right(&clamp_text(&usage, cols.2), cols.2),
-                    pad_right(&clamp_text(row.reset_at.as_deref().unwrap_or("?"), cols.3), cols.3),
+                    pad_right(
+                        &clamp_text(row.reset_at.as_deref().unwrap_or("?"), cols.3),
+                        cols.3,
+                    ),
                     pad_right(&clamp_text(&meta, cols.4), cols.4),
                 ]
                 .join(" "),

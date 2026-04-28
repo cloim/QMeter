@@ -18,4 +18,3 @@ pub trait Provider {
     fn id(&self) -> ProviderId;
     fn acquire(&self, ctx: AcquireContext) -> ProviderResult;
 }
-

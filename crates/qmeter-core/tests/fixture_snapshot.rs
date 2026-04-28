@@ -1,4 +1,4 @@
-use qmeter_core::snapshot::{collect_fixture_snapshot, CollectOptions};
+use qmeter_core::snapshot::{CollectOptions, collect_fixture_snapshot};
 use qmeter_core::types::ProviderId;
 
 #[test]
@@ -39,5 +39,10 @@ fn fixture_snapshot_respects_selected_providers() {
     });
 
     assert_eq!(snapshot.rows.len(), 2);
-    assert!(snapshot.rows.iter().all(|row| row.provider == ProviderId::Codex));
+    assert!(
+        snapshot
+            .rows
+            .iter()
+            .all(|row| row.provider == ProviderId::Codex)
+    );
 }

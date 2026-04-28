@@ -78,12 +78,14 @@ fn selected_provider_filters_rows() {
 }
 
 #[test]
-fn non_fixture_mode_reports_provider_gap_instead_of_demo_rows() {
+fn non_fixture_claude_requires_oauth_credentials_instead_of_demo_rows() {
     let dir = tempfile::tempdir().expect("temp dir");
     let cache_path = dir.path().join("cache.v1.json");
     let output = qmeter()
         .env_remove("USAGE_STATUS_FIXTURE")
         .env("USAGE_STATUS_CACHE_PATH", &cache_path)
+        .env("HOME", dir.path())
+        .env("USERPROFILE", dir.path())
         .args(["--json", "--providers", "claude"])
         .assert()
         .code(3)
@@ -94,7 +96,7 @@ fn non_fixture_mode_reports_provider_gap_instead_of_demo_rows() {
     let value: Value = serde_json::from_slice(&output).expect("stdout should be JSON");
     assert_eq!(value["rows"].as_array().expect("rows array").len(), 0);
     assert_eq!(value["errors"][0]["provider"], "claude");
-    assert_eq!(value["errors"][0]["type"], "tty-unavailable");
+    assert_eq!(value["errors"][0]["type"], "auth-required");
 }
 
 #[test]

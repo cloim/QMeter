@@ -88,7 +88,7 @@ Useful environment variables:
 - `USAGE_STATUS_FIXTURE=demo`
   Returns deterministic sample Claude/Codex rows without touching real tools.
 - `USAGE_STATUS_BASH_EXE`
-  Overrides the Git Bash path used by the Claude provider.
+  Overrides the Git Bash path used by the legacy Claude `/usage` screen runner.
 - `USAGE_STATUS_CODEX_COMMAND`
   Overrides the Codex command path.
 - `USAGE_STATUS_CACHE_PATH`
@@ -99,6 +99,8 @@ Useful environment variables:
   Overrides tray settings file location.
 
 Use fixture mode when working on output, UI, or notification behavior without depending on live provider state.
+
+The Rust Claude provider uses Claude Code OAuth credentials for live collection. On Windows and Linux it reads `~/.claude/.credentials.json`; on macOS it tries the `Claude Code-credentials` Keychain item first. Tests that exercise auth failure should isolate `HOME` and `USERPROFILE` so they do not depend on the developer's real Claude login state.
 
 ## Resource And Build Notes
 

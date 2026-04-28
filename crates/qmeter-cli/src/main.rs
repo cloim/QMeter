@@ -1,12 +1,10 @@
 use clap::{Parser, ValueEnum};
 use qmeter_core::cache::{
-    as_cache_rows, is_entry_fresh, load_cache, save_cache, CacheConfig, CacheProviderEntry,
-    CacheState,
+    CacheConfig, CacheProviderEntry, CacheState, as_cache_rows, is_entry_fresh, load_cache,
+    save_cache,
 };
 use qmeter_core::output::{render_graph, render_table};
-use qmeter_core::snapshot::{
-    collect_fixture_snapshot, is_fixture_mode_from_env, CollectOptions,
-};
+use qmeter_core::snapshot::{CollectOptions, collect_fixture_snapshot, is_fixture_mode_from_env};
 use qmeter_core::types::{NormalizedSnapshot, ProviderId};
 use qmeter_providers::claude::ClaudeProvider;
 use qmeter_providers::codex::CodexProvider;
@@ -88,7 +86,8 @@ fn run(cli: Cli) -> Result<(NormalizedSnapshot, i32), String> {
 
 fn collect_live_snapshot(opts: &CollectOptions) -> NormalizedSnapshot {
     let cache_config = CacheConfig::from_env();
-    let mut cache = load_cache(cache_config.clone()).unwrap_or_else(|_| CacheState::new(cache_config));
+    let mut cache =
+        load_cache(cache_config.clone()).unwrap_or_else(|_| CacheState::new(cache_config));
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let mut snapshot = NormalizedSnapshot {
         fetched_at: now.clone(),

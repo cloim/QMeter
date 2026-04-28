@@ -132,7 +132,8 @@ pub fn evaluate_notification_policy(
                 row: row.clone(),
                 reason,
             });
-            candidate.last_notified_at = Some(now_dt.to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
+            candidate.last_notified_at =
+                Some(now_dt.to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
         }
 
         next_state.insert(event_key, candidate);
@@ -204,4 +205,3 @@ fn should_notify_transition(
         .num_milliseconds()
         >= cooldown_ms as i64
 }
-

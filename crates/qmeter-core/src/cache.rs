@@ -154,7 +154,11 @@ pub fn is_entry_fresh(entry: &CacheProviderEntry, ttl_ms: u64, now: &str) -> boo
     elapsed >= 0 && elapsed as u64 <= ttl_ms
 }
 
-pub fn as_cache_rows(rows: &[NormalizedRow], stale: bool, note: Option<&str>) -> Vec<NormalizedRow> {
+pub fn as_cache_rows(
+    rows: &[NormalizedRow],
+    stale: bool,
+    note: Option<&str>,
+) -> Vec<NormalizedRow> {
     rows.iter()
         .map(|row| {
             let mut next = row.clone();

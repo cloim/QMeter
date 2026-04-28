@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use qmeter_core::notification_policy::{
-    evaluate_notification_policy, is_in_quiet_hours, AlertLevel, NotificationPolicyConfig,
-    NotificationState, NotificationThresholds, QuietHours,
+    AlertLevel, NotificationPolicyConfig, NotificationState, NotificationThresholds, QuietHours,
+    evaluate_notification_policy, is_in_quiet_hours,
 };
 use qmeter_core::types::{Confidence, NormalizedRow, ProviderId, SourceKind};
 
@@ -71,20 +71,12 @@ fn suppresses_during_cooldown_and_renotifies_after_cooldown() {
         },
     );
 
-    let early = evaluate_notification_policy(
-        &[row(85.0)],
-        &prev,
-        &cfg(),
-        "2026-02-24T00:00:30.000Z",
-    );
+    let early =
+        evaluate_notification_policy(&[row(85.0)], &prev, &cfg(), "2026-02-24T00:00:30.000Z");
     assert_eq!(early.events.len(), 0);
 
-    let late = evaluate_notification_policy(
-        &[row(85.0)],
-        &prev,
-        &cfg(),
-        "2026-02-24T00:02:00.000Z",
-    );
+    let late =
+        evaluate_notification_policy(&[row(85.0)], &prev, &cfg(), "2026-02-24T00:02:00.000Z");
     assert_eq!(late.events.len(), 1);
     assert_eq!(late.events[0].reason, "cooldown");
 }
@@ -102,10 +94,7 @@ fn hysteresis_prevents_warning_drop_near_threshold() {
     );
 
     let keep = evaluate_notification_policy(&[row(79.0)], &prev, &cfg(), "2026-02-24T00:00:00Z");
-    assert_eq!(
-        keep.next_state["codex:codex:5h"].level,
-        AlertLevel::Warning
-    );
+    assert_eq!(keep.next_state["codex:codex:5h"].level, AlertLevel::Warning);
 
     let drop = evaluate_notification_policy(&[row(77.0)], &prev, &cfg(), "2026-02-24T00:00:00Z");
     assert_eq!(drop.next_state["codex:codex:5h"].level, AlertLevel::Normal);
