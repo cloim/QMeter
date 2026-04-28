@@ -14,7 +14,7 @@ This file provides guidance to agents working in this repository.
    - Build, test, smoke-test, packaging commands, fixtures, and local verification.
 
 4. [Tray And Settings](./.blueprint/tray-and-settings.md)
-   - Electron-specific behavior, settings persistence, notifications, updater caveats.
+   - Rust tray behavior, settings persistence, notifications, runtime diagnostics.
 
 5. [History And Roadmap](./.blueprint/history-and-roadmap.md)
    - Historical context, current caveats, and likely follow-up areas.

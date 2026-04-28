@@ -78,7 +78,7 @@ impl ClaudeProvider {
                     error_type: error_type_for_message(&message),
                     message,
                     actionable: Some(
-                        "Rust Claude PTY capture is not available yet; use the legacy Node CLI for Claude live data"
+                        "Rust Claude PTY capture is not available; use the default OAuth usage provider for Claude live data"
                             .to_string(),
                     ),
                 }],

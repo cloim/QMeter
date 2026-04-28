@@ -41,7 +41,7 @@ pub fn collect_unimplemented_snapshot(opts: &CollectOptions) -> NormalizedSnapsh
                 error_type: NormalizedErrorType::AcquireFailed,
                 message: "Rust provider acquisition is not implemented yet".to_string(),
                 actionable: Some(
-                    "use USAGE_STATUS_FIXTURE=demo or the legacy Node CLI for live provider data"
+                    "use USAGE_STATUS_FIXTURE=demo or enable the Rust live provider path"
                         .to_string(),
                 ),
             })
