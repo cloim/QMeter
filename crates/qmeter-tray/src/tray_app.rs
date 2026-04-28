@@ -75,6 +75,25 @@ fn run_platform_tray(
         Icon, MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent,
         menu::{Menu, MenuEvent, MenuItem},
     };
+    use winit::event::{Event, StartCause};
+    use winit::event_loop::{ControlFlow, EventLoop};
+
+    #[derive(Clone, Debug)]
+    enum UserEvent {
+        Tray(TrayIconEvent),
+        Menu(MenuEvent),
+    }
+
+    let event_loop = EventLoop::<UserEvent>::with_user_event().build()?;
+    let proxy = event_loop.create_proxy();
+    TrayIconEvent::set_event_handler(Some(move |event| {
+        let _ = proxy.send_event(UserEvent::Tray(event));
+    }));
+
+    let proxy = event_loop.create_proxy();
+    MenuEvent::set_event_handler(Some(move |event| {
+        let _ = proxy.send_event(UserEvent::Menu(event));
+    }));
 
     let menu = Menu::new();
     let open = MenuItem::new("Open QMeter", true, None);
@@ -100,56 +119,94 @@ fn run_platform_tray(
     let mut last_refresh = Instant::now();
     let refresh_interval = Duration::from_millis(state.settings.refresh_interval_ms.max(5_000));
 
-    loop {
-        if let Ok(event) = MenuEvent::receiver().recv_timeout(Duration::from_millis(250)) {
-            if event.id == quit_id {
-                break;
-            } else if event.id == open_id {
-                show_popup("QMeter", &state.render_popup_text());
-            } else if event.id == refresh_id {
-                let events =
-                    refresh_state(&mut state, &log_config, true, Some(&mut notification_state))?;
-                save_notification_state(&notification_config, &notification_state)?;
-                show_notification_events(&events);
-                last_refresh = Instant::now();
-                show_popup("QMeter", &state.render_popup_text());
-            } else if event.id == settings_id {
-                show_popup("QMeter Settings", &render_settings_text(&state));
-            }
-        }
-
-        while let Ok(event) = TrayIconEvent::receiver().try_recv() {
+    #[allow(deprecated)]
+    {
+        event_loop.run(move |event, event_loop| {
+            event_loop.set_control_flow(ControlFlow::WaitUntil(last_refresh + refresh_interval));
             match event {
-                TrayIconEvent::Click {
-                    button: MouseButton::Left,
-                    button_state: MouseButtonState::Up,
-                    ..
+                Event::NewEvents(StartCause::ResumeTimeReached { .. }) | Event::AboutToWait => {
+                    if last_refresh.elapsed() >= refresh_interval {
+                        match refresh_state(
+                            &mut state,
+                            &log_config,
+                            false,
+                            Some(&mut notification_state),
+                        ) {
+                            Ok(events) => {
+                                if let Err(err) = save_notification_state(
+                                    &notification_config,
+                                    &notification_state,
+                                ) {
+                                    let _ = append_runtime_log(
+                                        &log_config,
+                                        "notification-state-error",
+                                        &err.to_string(),
+                                    );
+                                }
+                                show_notification_events(&events);
+                            }
+                            Err(err) => {
+                                let _ = append_runtime_log(
+                                    &log_config,
+                                    "refresh-error",
+                                    &err.to_string(),
+                                );
+                            }
+                        }
+                        last_refresh = Instant::now();
+                    }
                 }
-                | TrayIconEvent::DoubleClick {
-                    button: MouseButton::Left,
-                    ..
-                } => show_popup("QMeter", &state.render_popup_text()),
+                Event::UserEvent(UserEvent::Menu(event)) => {
+                    if event.id == quit_id {
+                        event_loop.exit();
+                    } else if event.id == open_id {
+                        show_popup("QMeter", &state.render_popup_text());
+                    } else if event.id == refresh_id {
+                        match refresh_state(
+                            &mut state,
+                            &log_config,
+                            true,
+                            Some(&mut notification_state),
+                        ) {
+                            Ok(events) => {
+                                if let Err(err) = save_notification_state(
+                                    &notification_config,
+                                    &notification_state,
+                                ) {
+                                    let _ = append_runtime_log(
+                                        &log_config,
+                                        "notification-state-error",
+                                        &err.to_string(),
+                                    );
+                                }
+                                show_notification_events(&events);
+                                last_refresh = Instant::now();
+                                show_popup("QMeter", &state.render_popup_text());
+                            }
+                            Err(err) => {
+                                let _ =
+                                    append_runtime_log(&log_config, "menu-error", &err.to_string());
+                            }
+                        }
+                    } else if event.id == settings_id {
+                        show_popup("QMeter Settings", &render_settings_text(&state));
+                    }
+                }
+                Event::UserEvent(UserEvent::Tray(event)) => match event {
+                    TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    }
+                    | TrayIconEvent::DoubleClick {
+                        button: MouseButton::Left,
+                        ..
+                    } => show_popup("QMeter", &state.render_popup_text()),
+                    _ => {}
+                },
                 _ => {}
             }
-        }
-
-        if last_refresh.elapsed() >= refresh_interval {
-            match refresh_state(
-                &mut state,
-                &log_config,
-                false,
-                Some(&mut notification_state),
-            ) {
-                Ok(events) => {
-                    save_notification_state(&notification_config, &notification_state)?;
-                    show_notification_events(&events);
-                }
-                Err(err) => {
-                    append_runtime_log(&log_config, "refresh-error", &err.to_string())?;
-                }
-            }
-            last_refresh = Instant::now();
-        }
+        })?;
     }
 
     Ok(())
