@@ -28,7 +28,7 @@ cargo run -p qmeter-cli -- --json
 cargo run -p qmeter-cli -- --view table
 cargo run -p qmeter-cli -- --view graph
 cargo check -p qmeter-tray
-cargo build -p qmeter-tray --bins
+cargo build -p qmeter-tray
 cargo run -p qmeter-tray --bin qmeter-tray
 ```
 
@@ -95,6 +95,14 @@ Outputs:
 - `target/release/qmeter-tray.exe`
 
 Tag-triggered GitHub Actions builds these binaries and uploads them to the matching GitHub release.
+
+## CI/CD
+
+GitHub Actions is Rust-only:
+
+- `CI` runs on pull requests and pushes to `main`
+- CI checks `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --locked`, and `cargo build --release --workspace --locked`
+- `Release` runs on `v*` tags, validates the tag format, builds the same Rust release binaries, zips them, and uploads release assets
 
 ## Troubleshooting
 

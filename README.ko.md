@@ -28,7 +28,7 @@ cargo run -p qmeter-cli -- --json
 cargo run -p qmeter-cli -- --view table
 cargo run -p qmeter-cli -- --view graph
 cargo check -p qmeter-tray
-cargo build -p qmeter-tray --bins
+cargo build -p qmeter-tray
 cargo run -p qmeter-tray --bin qmeter-tray
 ```
 
@@ -95,6 +95,14 @@ cargo build --release --workspace
 - `target/release/qmeter-tray.exe`
 
 태그 기반 GitHub Actions가 이 바이너리를 빌드하고 해당 GitHub release에 업로드합니다.
+
+## CI/CD
+
+GitHub Actions는 Rust 전용으로 동작합니다.
+
+- `CI`: pull request와 `main` push에서 실행
+- CI 검증: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --locked`, `cargo build --release --workspace --locked`
+- `Release`: `v*` tag push에서 tag 형식을 검증하고 같은 Rust release 바이너리를 빌드한 뒤 zip과 release asset을 업로드
 
 ## Troubleshooting
 

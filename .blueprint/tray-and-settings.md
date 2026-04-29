@@ -21,11 +21,11 @@ The tray creates a Windows tray icon and context menu with:
 - `Settings`
 - `Quit`
 
-The usage popup is a Rust-native WebView2 overlay owned by the `qmeter-tray.exe` process. The tray keeps one overlay instance alive after first creation, hides/shows the same window on tray clicks, and updates existing WebView content with JavaScript when snapshots change. The tray passes the last tray click position so the overlay opens above the tray area instead of centered on the screen. It renders the legacy HTML/CSS provider cards with progress bars, reset timing, and a manual refresh action.
+The usage popup is a Rust-native WebView2 overlay owned by the `qmeter-tray.exe` process. The tray keeps one overlay instance alive after first creation, hides/shows the same window on tray clicks, and updates existing WebView content with JavaScript when snapshots change. The tray passes the last tray click position so the overlay opens above the tray area instead of centered on the screen. It renders the legacy HTML/CSS provider cards with progress bars, reset timing, a refresh skeleton, a manual refresh action, and the settings modal.
 
 The popup formats timestamps for local display as `YYYY-MM-DD HH:mm:ss`. Repeated tray clicks must not spawn additional processes or recreate the WebView after the first overlay exists.
 
-Notification and simple settings summaries can still use native message dialogs. The primary usage surface should stay inside the tray process so overlay display is immediate and cannot leave orphan popup processes.
+Notifications can still use native message dialogs. Usage and settings surfaces should stay inside the tray process so overlay display is immediate and cannot leave orphan popup processes.
 
 ## Refresh Loop
 

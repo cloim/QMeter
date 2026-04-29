@@ -62,24 +62,23 @@ where
 
     for provider in &opts.providers {
         let cached = cache.providers.get(provider).cloned();
-        if !opts.refresh {
-            if let Some(entry) = cached.as_ref() {
-                if is_entry_fresh(entry, cache.config.ttl_ms, now) {
-                    snapshot.rows.extend(as_cache_rows(
-                        &entry.rows,
-                        false,
-                        Some(&format!("cached at {}", entry.fetched_at)),
-                    ));
-                    continue;
-                }
-            }
+        if !opts.refresh
+            && let Some(entry) = cached.as_ref()
+            && is_entry_fresh(entry, cache.config.ttl_ms, now)
+        {
+            snapshot.rows.extend(as_cache_rows(
+                &entry.rows,
+                false,
+                Some(&format!("cached at {}", entry.fetched_at)),
+            ));
+            continue;
         }
 
         let result = acquire(*provider);
-        if opts.debug {
-            if let Some(debug) = result.debug.clone() {
-                debug_messages.push((*provider, debug));
-            }
+        if opts.debug
+            && let Some(debug) = result.debug.clone()
+        {
+            debug_messages.push((*provider, debug));
         }
         snapshot.errors.extend(result.errors);
 

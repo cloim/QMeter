@@ -76,17 +76,17 @@ impl TrayState {
             "Last checked: {}",
             self.last_checked_at.as_deref().unwrap_or("never")
         ));
-        if let Some(snapshot) = &self.snapshot {
-            if !snapshot.errors.is_empty() {
-                lines.push("Errors:".to_string());
-                for error in &snapshot.errors {
-                    lines.push(format!(
-                        "- {} {}: {}",
-                        error.provider.as_str(),
-                        serde_error_type(&error.error_type),
-                        error.message
-                    ));
-                }
+        if let Some(snapshot) = &self.snapshot
+            && !snapshot.errors.is_empty()
+        {
+            lines.push("Errors:".to_string());
+            for error in &snapshot.errors {
+                lines.push(format!(
+                    "- {} {}: {}",
+                    error.provider.as_str(),
+                    serde_error_type(&error.error_type),
+                    error.message
+                ));
             }
         }
         lines.join("\n")

@@ -2911,7 +2911,7 @@ checksum = "e0c5ccf5294c6ccd63a74f1565028353830a9c2f5eb0c682c355c471726a6e3f"
 
 [[package]]
 name = "qmeter-cli"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "assert_cmd",
  "chrono",
@@ -2925,7 +2925,7 @@ dependencies = [
 
 [[package]]
 name = "qmeter-core"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "chrono",
  "serde",
@@ -2935,7 +2935,7 @@ dependencies = [
 
 [[package]]
 name = "qmeter-providers"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "chrono",
  "qmeter-core",
@@ -2948,7 +2948,7 @@ dependencies = [
 
 [[package]]
 name = "qmeter-tray"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "base64",
  "chrono",

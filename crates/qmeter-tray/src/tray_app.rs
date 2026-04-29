@@ -150,62 +150,56 @@ fn run_platform_tray(
         event_loop.run(move |event, event_loop| {
             event_loop.set_control_flow(ControlFlow::WaitUntil(last_refresh + refresh_interval));
             match event {
-                Event::NewEvents(StartCause::ResumeTimeReached { .. }) | Event::AboutToWait => {
-                    if last_refresh.elapsed() >= refresh_interval {
-                        match refresh_state(
-                            &mut state,
-                            &log_config,
-                            false,
-                            Some(&mut notification_state),
-                        ) {
-                            Ok(events) => {
-                                if let Err(err) = save_notification_state(
-                                    &notification_config,
-                                    &notification_state,
-                                ) {
-                                    let _ = append_runtime_log(
-                                        &log_config,
-                                        "notification-state-error",
-                                        &err.to_string(),
-                                    );
-                                }
-                                show_notification_events(&events);
-                                if popup_overlay.is_visible() {
-                                    if let Some(snapshot) = &state.snapshot {
-                                        popup_overlay.update_snapshot(snapshot);
-                                        popup_overlay.update_settings(&state.settings);
-                                    }
-                                }
-                            }
-                            Err(err) => {
+                Event::NewEvents(StartCause::ResumeTimeReached { .. }) | Event::AboutToWait
+                    if last_refresh.elapsed() >= refresh_interval =>
+                {
+                    match refresh_state(
+                        &mut state,
+                        &log_config,
+                        false,
+                        Some(&mut notification_state),
+                    ) {
+                        Ok(events) => {
+                            if let Err(err) =
+                                save_notification_state(&notification_config, &notification_state)
+                            {
                                 let _ = append_runtime_log(
                                     &log_config,
-                                    "refresh-error",
+                                    "notification-state-error",
                                     &err.to_string(),
                                 );
                             }
+                            show_notification_events(&events);
+                            if popup_overlay.is_visible()
+                                && let Some(snapshot) = &state.snapshot
+                            {
+                                popup_overlay.update_snapshot(snapshot);
+                                popup_overlay.update_settings(&state.settings);
+                            }
                         }
-                        last_refresh = Instant::now();
+                        Err(err) => {
+                            let _ =
+                                append_runtime_log(&log_config, "refresh-error", &err.to_string());
+                        }
                     }
+                    last_refresh = Instant::now();
                 }
+                Event::NewEvents(StartCause::ResumeTimeReached { .. }) | Event::AboutToWait => {}
                 Event::UserEvent(UserEvent::Menu(event)) => {
                     if event.id == quit_id {
                         event_loop.exit();
                     } else if event.id == open_id {
-                        if let Some(snapshot) = &state.snapshot {
-                            if let Err(err) = popup_overlay.toggle(
+                        if let Some(snapshot) = &state.snapshot
+                            && let Err(err) = popup_overlay.toggle(
                                 event_loop,
                                 popup_proxy.clone(),
                                 snapshot,
                                 &state.settings,
                                 popup_anchor,
-                            ) {
-                                let _ = append_runtime_log(
-                                    &log_config,
-                                    "popup-error",
-                                    &err.to_string(),
-                                );
-                            }
+                            )
+                        {
+                            let _ =
+                                append_runtime_log(&log_config, "popup-error", &err.to_string());
                         }
                     } else if event.id == refresh_id {
                         if popup_overlay.is_visible() {
@@ -230,20 +224,20 @@ fn run_platform_tray(
                                 }
                                 show_notification_events(&events);
                                 last_refresh = Instant::now();
-                                if let Some(snapshot) = &state.snapshot {
-                                    if let Err(err) = popup_overlay.show_or_create(
+                                if let Some(snapshot) = &state.snapshot
+                                    && let Err(err) = popup_overlay.show_or_create(
                                         event_loop,
                                         popup_proxy.clone(),
                                         snapshot,
                                         &state.settings,
                                         popup_anchor,
-                                    ) {
-                                        let _ = append_runtime_log(
-                                            &log_config,
-                                            "popup-error",
-                                            &err.to_string(),
-                                        );
-                                    }
+                                    )
+                                {
+                                    let _ = append_runtime_log(
+                                        &log_config,
+                                        "popup-error",
+                                        &err.to_string(),
+                                    );
                                 }
                             }
                             Err(err) => {
@@ -251,22 +245,21 @@ fn run_platform_tray(
                                     append_runtime_log(&log_config, "menu-error", &err.to_string());
                             }
                         }
-                    } else if event.id == settings_id {
-                        if let Some(snapshot) = &state.snapshot {
-                            if let Err(err) = popup_overlay.show_settings(
-                                event_loop,
-                                popup_proxy.clone(),
-                                snapshot,
-                                &state.settings,
-                                popup_anchor,
-                            ) {
-                                let _ = append_runtime_log(
-                                    &log_config,
-                                    "settings-popup-error",
-                                    &err.to_string(),
-                                );
-                            }
-                        }
+                    } else if event.id == settings_id
+                        && let Some(snapshot) = &state.snapshot
+                        && let Err(err) = popup_overlay.show_settings(
+                            event_loop,
+                            popup_proxy.clone(),
+                            snapshot,
+                            &state.settings,
+                            popup_anchor,
+                        )
+                    {
+                        let _ = append_runtime_log(
+                            &log_config,
+                            "settings-popup-error",
+                            &err.to_string(),
+                        );
                     }
                 }
                 Event::UserEvent(UserEvent::Tray(event)) => {
@@ -279,42 +272,26 @@ fn run_platform_tray(
                             button_state: MouseButtonState::Up,
                             position,
                             ..
-                        } => {
-                            if let Some(snapshot) = &state.snapshot {
-                                if let Err(err) = popup_overlay.toggle(
-                                    event_loop,
-                                    popup_proxy.clone(),
-                                    snapshot,
-                                    &state.settings,
-                                    Some((position.x, position.y)),
-                                ) {
-                                    let _ = append_runtime_log(
-                                        &log_config,
-                                        "popup-error",
-                                        &err.to_string(),
-                                    );
-                                }
-                            }
                         }
-                        TrayIconEvent::DoubleClick {
+                        | TrayIconEvent::DoubleClick {
                             button: MouseButton::Left,
                             position,
                             ..
                         } => {
-                            if let Some(snapshot) = &state.snapshot {
-                                if let Err(err) = popup_overlay.toggle(
+                            if let Some(snapshot) = &state.snapshot
+                                && let Err(err) = popup_overlay.toggle(
                                     event_loop,
                                     popup_proxy.clone(),
                                     snapshot,
                                     &state.settings,
                                     Some((position.x, position.y)),
-                                ) {
-                                    let _ = append_runtime_log(
-                                        &log_config,
-                                        "popup-error",
-                                        &err.to_string(),
-                                    );
-                                }
+                                )
+                            {
+                                let _ = append_runtime_log(
+                                    &log_config,
+                                    "popup-error",
+                                    &err.to_string(),
+                                );
                             }
                         }
                         _ => {}

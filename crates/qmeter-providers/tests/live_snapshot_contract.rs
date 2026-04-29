@@ -56,7 +56,7 @@ fn live_snapshot_uses_fresh_cache_without_acquiring_provider() {
     assert_eq!(snapshot.errors, vec![]);
     assert_eq!(snapshot.rows.len(), 1);
     assert_eq!(snapshot.rows[0].source, SourceKind::Cache);
-    assert_eq!(snapshot.rows[0].stale, false);
+    assert!(!snapshot.rows[0].stale);
 }
 
 #[test]
@@ -94,7 +94,7 @@ fn live_snapshot_falls_back_to_stale_cache_when_provider_fails() {
 
     assert_eq!(snapshot.rows.len(), 1);
     assert_eq!(snapshot.rows[0].source, SourceKind::Cache);
-    assert_eq!(snapshot.rows[0].stale, true);
+    assert!(snapshot.rows[0].stale);
     assert_eq!(
         snapshot.errors[0].error_type,
         NormalizedErrorType::NotInstalled

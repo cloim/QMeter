@@ -58,9 +58,10 @@ Related modules:
 
 - [`runtime_log.rs`](../crates/qmeter-tray/src/runtime_log.rs): `%LOCALAPPDATA%\qmeter\tray-runtime.log`
 - [`tray_state.rs`](../crates/qmeter-tray/src/tray_state.rs): visible providers, snapshot state, popup text rendering
+- [`popup_overlay.rs`](../crates/qmeter-tray/src/popup_overlay.rs): in-process WebView2 usage overlay, refresh skeleton, and settings UI
 - [`notification_store.rs`](../crates/qmeter-tray/src/notification_store.rs): persisted notification cooldown state
 
-The current popup is a native message dialog. It avoids Node, Electron, Chromium, and unsafe Win32 calls.
+The current popup is a reusable in-process WebView2 overlay owned by `qmeter-tray.exe`. It avoids the legacy Node/Electron runtime and does not spawn a separate popup process.
 
 ## Settings And Notifications
 

@@ -5,7 +5,7 @@
 Run all Rust tests:
 
 ```powershell
-cargo test --workspace
+cargo test --workspace --locked
 ```
 
 Run CLI:
@@ -32,7 +32,7 @@ cargo run -p qmeter-tray --bin qmeter-tray
 Build release binaries:
 
 ```powershell
-cargo build --release --workspace
+cargo build --release --workspace --locked
 ```
 
 Expected outputs:
@@ -67,9 +67,10 @@ cargo run -p qmeter-tray --bin qmeter-tray
 For code changes:
 
 1. `cargo fmt --all --check`
-2. `cargo test --workspace`
-3. `cargo check -p qmeter-tray` when tray code changed
-4. `cargo build --release --workspace` before release or legacy-removal commits
+2. `cargo clippy --workspace --all-targets --locked -- -D warnings`
+3. `cargo test --workspace --locked`
+4. `cargo check -p qmeter-tray` when tray code changed
+5. `cargo build --release --workspace --locked` before release or legacy-removal commits
 
 For CLI/output changes, also smoke fixture output:
 
@@ -82,7 +83,9 @@ cargo run -p qmeter-cli -- --view graph
 
 ## Release
 
-The tag-triggered workflow in [`.github/workflows/release.yml`](../.github/workflows/release.yml) validates the tag, runs Rust tests, builds release binaries, creates a zip, and uploads assets to the matching GitHub release.
+The CI workflow in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs formatting, clippy, tests, and release build checks on pull requests and pushes to `main`.
+
+The tag-triggered workflow in [`.github/workflows/release.yml`](../.github/workflows/release.yml) validates the tag, runs Rust formatting/tests, builds release binaries with `--locked`, creates a zip, and uploads assets to the matching GitHub release.
 
 Release sequence:
 
@@ -96,6 +99,6 @@ Release sequence:
 Example:
 
 ```powershell
-git tag v0.1.8
-git push origin v0.1.8
+git tag v0.1.9
+git push origin v0.1.9
 ```
