@@ -27,13 +27,13 @@ QMeter는 Claude Code와 Codex 사용량, 초기화 시간, 캐시 상태, provi
 ## 빌드/실행
 
 release 바이너리 이름은 CLI가 `qmeter.exe`, 트레이 앱이 `qmeter-tray.exe`입니다.
-CLI의 Cargo package 이름만 `qmeter-cli`라서 소스에서 개발 실행할 때는 `-p qmeter-cli`를 사용합니다.
+CLI Cargo package도 `qmeter`라서 소스에서 개발 실행할 때는 `-p qmeter`를 사용합니다.
 
 ```powershell
 cargo test --workspace
-cargo run -p qmeter-cli -- --json
-cargo run -p qmeter-cli -- --view table
-cargo run -p qmeter-cli -- --view graph
+cargo run -p qmeter -- --json
+cargo run -p qmeter -- --view table
+cargo run -p qmeter -- --view graph
 cargo check -p qmeter-tray
 cargo build -p qmeter-tray
 cargo run -p qmeter-tray --bin qmeter-tray
@@ -43,9 +43,9 @@ cargo run -p qmeter-tray --bin qmeter-tray
 
 ```powershell
 $env:USAGE_STATUS_FIXTURE='demo'
-cargo run -p qmeter-cli -- --json
-cargo run -p qmeter-cli -- --view table
-cargo run -p qmeter-cli -- --view graph
+cargo run -p qmeter -- --json
+cargo run -p qmeter -- --view table
+cargo run -p qmeter -- --view graph
 ```
 
 ## CLI
@@ -59,7 +59,7 @@ qmeter.exe --json --providers claude,codex --refresh --debug
 소스에서 개발 실행:
 
 ```powershell
-cargo run -p qmeter-cli -- --json --providers claude,codex --refresh --debug
+cargo run -p qmeter -- --json --providers claude,codex --refresh --debug
 ```
 
 옵션:

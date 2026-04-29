@@ -10,12 +10,12 @@ cargo test --workspace --locked
 
 Run CLI:
 
-The release CLI binary is `qmeter.exe`. The Cargo package is `qmeter-cli`, so source runs use `-p qmeter-cli`.
+The release CLI binary is `qmeter.exe`. The Cargo package is `qmeter`, so source runs use `-p qmeter`.
 
 ```powershell
-cargo run -p qmeter-cli -- --json
-cargo run -p qmeter-cli -- --view table
-cargo run -p qmeter-cli -- --view graph
+cargo run -p qmeter -- --json
+cargo run -p qmeter -- --view table
+cargo run -p qmeter -- --view graph
 ```
 
 Check tray:
@@ -48,9 +48,9 @@ Use fixture mode to verify output and tray rendering without live provider acces
 
 ```powershell
 $env:USAGE_STATUS_FIXTURE='demo'
-cargo run -p qmeter-cli -- --json
-cargo run -p qmeter-cli -- --view table
-cargo run -p qmeter-cli -- --view graph
+cargo run -p qmeter -- --json
+cargo run -p qmeter -- --view table
+cargo run -p qmeter -- --view graph
 cargo build -p qmeter-tray
 cargo run -p qmeter-tray --bin qmeter-tray
 ```
@@ -78,9 +78,9 @@ For CLI/output changes, also smoke fixture output:
 
 ```powershell
 $env:USAGE_STATUS_FIXTURE='demo'
-cargo run -p qmeter-cli -- --json
-cargo run -p qmeter-cli -- --view table
-cargo run -p qmeter-cli -- --view graph
+cargo run -p qmeter -- --json
+cargo run -p qmeter -- --view table
+cargo run -p qmeter -- --view graph
 ```
 
 ## Release

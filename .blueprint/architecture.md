@@ -6,7 +6,7 @@ QMeter is a Rust workspace:
 
 - [`crates/qmeter-core`](../crates/qmeter-core): normalized types, cache, fixture snapshots, output rendering, settings, scheduler, notification policy
 - [`crates/qmeter-providers`](../crates/qmeter-providers): Claude and Codex live acquisition plus shared live snapshot orchestration
-- [`crates/qmeter-cli`](../crates/qmeter-cli): command-line interface
+- [`crates/qmeter`](../crates/qmeter): command-line interface
 - [`crates/qmeter-tray`](../crates/qmeter-tray): Windows tray runtime
 
 ## Snapshot Flow

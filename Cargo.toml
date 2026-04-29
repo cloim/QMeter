@@ -1,7 +1,7 @@
 [workspace]
 members = [
   "crates/qmeter-core",
-  "crates/qmeter-cli",
+  "crates/qmeter",
   "crates/qmeter-providers",
   "crates/qmeter-tray",
 ]

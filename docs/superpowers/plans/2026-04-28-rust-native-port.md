@@ -27,8 +27,8 @@
 - Create: `crates/qmeter-providers/src/codex.rs`
 - Create: `crates/qmeter-providers/src/claude.rs`
 - Create: `crates/qmeter-providers/src/claude_usage.rs`
-- Create: `crates/qmeter-cli/Cargo.toml`
-- Create: `crates/qmeter-cli/src/main.rs`
+- Create: `crates/qmeter/Cargo.toml`
+- Create: `crates/qmeter/src/main.rs`
 - Create: `crates/qmeter-tray/Cargo.toml`
 - Create: `crates/qmeter-tray/src/main.rs`
 - Create: `crates/qmeter-tray/src/runtime_log.rs`
@@ -47,8 +47,8 @@
 - Create: `Cargo.toml`
 - Create: `crates/qmeter-core/Cargo.toml`
 - Create: `crates/qmeter-core/src/lib.rs`
-- Create: `crates/qmeter-cli/Cargo.toml`
-- Create: `crates/qmeter-cli/src/main.rs`
+- Create: `crates/qmeter/Cargo.toml`
+- Create: `crates/qmeter/src/main.rs`
 
 - [ ] **Step 1: Write failing workspace check**
 
@@ -62,7 +62,7 @@ Expected: FAIL because no Cargo workspace exists.
 
 - [ ] **Step 2: Add minimal workspace and placeholder crates**
 
-Create root workspace and minimal `qmeter-core` and `qmeter-cli` crates.
+Create root workspace and minimal `qmeter-core` and `qmeter` crates.
 
 - [ ] **Step 3: Verify workspace compiles**
 
@@ -77,7 +77,7 @@ Expected: PASS.
 - [ ] **Step 4: Commit**
 
 ```powershell
-git add Cargo.toml crates/qmeter-core crates/qmeter-cli
+git add Cargo.toml crates/qmeter-core crates/qmeter
 git commit -m "build: add rust workspace skeleton"
 ```
 
@@ -163,7 +163,7 @@ git commit -m "feat: add rust fixture snapshot"
 ## Task 4: CLI Contract
 
 **Files:**
-- Modify: `crates/qmeter-cli/src/main.rs`
+- Modify: `crates/qmeter/src/main.rs`
 - Create: `crates/qmeter-core/src/output.rs`
 
 - [ ] **Step 1: Write failing CLI tests**
@@ -180,7 +180,7 @@ Cover:
 - [ ] **Step 2: Verify failures**
 
 ```powershell
-cargo test -p qmeter-cli
+cargo test -p qmeter
 ```
 
 Expected: FAIL because CLI behavior is missing.
@@ -192,8 +192,8 @@ Preserve existing help semantics where possible, exit codes, table headers, grap
 - [ ] **Step 4: Verify**
 
 ```powershell
-cargo test -p qmeter-cli
-cargo run -p qmeter-cli -- --help
+cargo test -p qmeter
+cargo run -p qmeter -- --help
 ```
 
 Expected: tests PASS and help prints.
@@ -201,7 +201,7 @@ Expected: tests PASS and help prints.
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add crates/qmeter-cli crates/qmeter-core
+git add crates/qmeter crates/qmeter-core
 git commit -m "feat: port qmeter cli contract to rust"
 ```
 
@@ -456,7 +456,7 @@ Document Rust commands:
 
 ```powershell
 cargo test --workspace
-cargo run -p qmeter-cli -- --json
+cargo run -p qmeter -- --json
 cargo run -p qmeter-tray
 cargo build --release --workspace
 ```
@@ -494,9 +494,9 @@ Run:
 
 ```powershell
 cargo test --workspace
-$env:USAGE_STATUS_FIXTURE='demo'; cargo run -p qmeter-cli -- --json
-$env:USAGE_STATUS_FIXTURE='demo'; cargo run -p qmeter-cli -- --view table
-$env:USAGE_STATUS_FIXTURE='demo'; cargo run -p qmeter-cli -- --view graph
+$env:USAGE_STATUS_FIXTURE='demo'; cargo run -p qmeter -- --json
+$env:USAGE_STATUS_FIXTURE='demo'; cargo run -p qmeter -- --view table
+$env:USAGE_STATUS_FIXTURE='demo'; cargo run -p qmeter -- --view graph
 ```
 
 - [ ] **Step 2: Manually smoke tray**

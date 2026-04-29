@@ -40,7 +40,7 @@ Use a Rust workspace with focused crates:
   - Claude provider
   - Codex provider
   - provider-specific parsers and process integration
-- `qmeter-cli`
+- `qmeter`
   - CLI argument parsing
   - output selection
   - debug diagnostics

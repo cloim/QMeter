@@ -20,7 +20,7 @@ There is no Node/Electron runtime requirement in the Rust-native app.
 
 ### CLI
 
-The CLI entry point is [`crates/qmeter-cli/src/main.rs`](../crates/qmeter-cli/src/main.rs).
+The CLI entry point is [`crates/qmeter/src/main.rs`](../crates/qmeter/src/main.rs).
 
 It supports:
 
