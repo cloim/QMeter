@@ -102,11 +102,11 @@ cargo build --release --workspace
 
 ## CI/CD
 
-GitHub Actions는 Rust 전용으로 동작합니다.
+GitHub Actions는 새 `v*` tag가 push될 때만 Rust CI/CD 경로를 실행합니다.
 
-- `CI`: pull request와 `main` push에서 실행
+- `Release`: tag 형식 검증
 - CI 검증: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --locked`, `cargo build --release --workspace --locked`
-- `Release`: `v*` tag push에서 tag 형식을 검증하고 같은 Rust release 바이너리를 빌드한 뒤 zip과 release asset을 업로드
+- CD 배포: `qmeter.exe`, `qmeter-tray.exe`를 zip으로 묶고 release asset 업로드
 
 ## Troubleshooting
 

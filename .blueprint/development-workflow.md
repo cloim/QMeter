@@ -83,9 +83,7 @@ cargo run -p qmeter-cli -- --view graph
 
 ## Release
 
-The CI workflow in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs formatting, clippy, tests, and release build checks on pull requests and pushes to `main`.
-
-The tag-triggered workflow in [`.github/workflows/release.yml`](../.github/workflows/release.yml) validates the tag, runs Rust formatting/tests, builds release binaries with `--locked`, creates a zip, and uploads assets to the matching GitHub release.
+The tag-triggered workflow in [`.github/workflows/release.yml`](../.github/workflows/release.yml) is the CI/CD path. It runs only for `v*` tag pushes, validates the tag, runs Rust formatting/clippy/tests, builds release binaries with `--locked`, creates a zip, and uploads assets to the matching GitHub release.
 
 Release sequence:
 

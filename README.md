@@ -102,11 +102,11 @@ Tag-triggered GitHub Actions builds these binaries and uploads them to the match
 
 ## CI/CD
 
-GitHub Actions is Rust-only:
+GitHub Actions runs the Rust CI/CD path only when a new `v*` tag is pushed:
 
-- `CI` runs on pull requests and pushes to `main`
+- `Release` validates the tag format
 - CI checks `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --locked`, and `cargo build --release --workspace --locked`
-- `Release` runs on `v*` tags, validates the tag format, builds the same Rust release binaries, zips them, and uploads release assets
+- CD zips `qmeter.exe` and `qmeter-tray.exe`, then uploads the release assets
 
 ## Troubleshooting
 
