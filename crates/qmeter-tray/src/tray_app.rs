@@ -1,15 +1,36 @@
-use std::{collections::BTreeMap, path::Path, process::Child};
+use std::collections::BTreeMap;
 
 use crate::notification_store::{
     NotificationStoreConfig, load_notification_state, save_notification_state,
 };
+#[cfg(windows)]
+use crate::popup_overlay::PopupOverlay;
 use crate::runtime_log::{RuntimeLogConfig, append_runtime_log};
 use crate::tray_state::TrayState;
 use qmeter_core::notification_policy::{
     AlertLevel, NotificationEvent, NotificationPolicyConfig, NotificationState,
     NotificationThresholds, QuietHours, evaluate_notification_policy,
 };
-use qmeter_core::settings::{TraySettingsConfig, load_tray_settings};
+use qmeter_core::settings::{
+    TraySettings, TraySettingsConfig, VisibleProviders, load_tray_settings, save_tray_settings,
+};
+use serde::Deserialize;
+
+#[cfg(windows)]
+#[derive(Clone, Debug)]
+pub(crate) enum UserEvent {
+    Tray(tray_icon::TrayIconEvent),
+    Menu(tray_icon::menu::MenuEvent),
+    PopupRefresh,
+    PopupSaveSettings(String),
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PopupSettingsUpdate {
+    refresh_interval_ms: u64,
+    visible_providers: VisibleProviders,
+}
 
 pub fn run_tray_app() -> Result<(), Box<dyn std::error::Error>> {
     let log_config = RuntimeLogConfig::from_env();
@@ -25,7 +46,13 @@ pub fn run_tray_app() -> Result<(), Box<dyn std::error::Error>> {
     let notification_state = load_notification_state(&notification_config)?;
     let mut state = TrayState::new(settings);
     let _ = refresh_state(&mut state, &log_config, false, None)?;
-    run_platform_tray(state, log_config, notification_config, notification_state)
+    run_platform_tray(
+        state,
+        log_config,
+        settings_config,
+        notification_config,
+        notification_state,
+    )
 }
 
 fn refresh_state(
@@ -67,6 +94,7 @@ fn refresh_state(
 fn run_platform_tray(
     mut state: TrayState,
     log_config: RuntimeLogConfig,
+    settings_config: TraySettingsConfig,
     notification_config: NotificationStoreConfig,
     mut notification_state: BTreeMap<String, NotificationState>,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -78,22 +106,17 @@ fn run_platform_tray(
     use winit::event::{Event, StartCause};
     use winit::event_loop::{ControlFlow, EventLoop};
 
-    #[derive(Clone, Debug)]
-    enum UserEvent {
-        Tray(TrayIconEvent),
-        Menu(MenuEvent),
-    }
-
     let event_loop = EventLoop::<UserEvent>::with_user_event().build()?;
-    let proxy = event_loop.create_proxy();
+    let tray_proxy = event_loop.create_proxy();
     TrayIconEvent::set_event_handler(Some(move |event| {
-        let _ = proxy.send_event(UserEvent::Tray(event));
+        let _ = tray_proxy.send_event(UserEvent::Tray(event));
     }));
 
-    let proxy = event_loop.create_proxy();
+    let menu_proxy = event_loop.create_proxy();
     MenuEvent::set_event_handler(Some(move |event| {
-        let _ = proxy.send_event(UserEvent::Menu(event));
+        let _ = menu_proxy.send_event(UserEvent::Menu(event));
     }));
+    let popup_proxy = event_loop.create_proxy();
 
     let menu = Menu::new();
     let open = MenuItem::new("Open QMeter", true, None);
@@ -119,8 +142,8 @@ fn run_platform_tray(
 
     let mut last_refresh = Instant::now();
     let mut popup_anchor = None;
-    let mut popup_child = None;
-    let refresh_interval = Duration::from_millis(state.settings.refresh_interval_ms.max(5_000));
+    let mut popup_overlay = PopupOverlay::new();
+    let mut refresh_interval = Duration::from_millis(state.settings.refresh_interval_ms.max(5_000));
 
     #[allow(deprecated)]
     {
@@ -147,6 +170,12 @@ fn run_platform_tray(
                                     );
                                 }
                                 show_notification_events(&events);
+                                if popup_overlay.is_visible() {
+                                    if let Some(snapshot) = &state.snapshot {
+                                        popup_overlay.update_snapshot(snapshot);
+                                        popup_overlay.update_settings(&state.settings);
+                                    }
+                                }
                             }
                             Err(err) => {
                                 let _ = append_runtime_log(
@@ -163,8 +192,25 @@ fn run_platform_tray(
                     if event.id == quit_id {
                         event_loop.exit();
                     } else if event.id == open_id {
-                        open_popup_window(&log_config, popup_anchor, &mut popup_child, true);
+                        if let Some(snapshot) = &state.snapshot {
+                            if let Err(err) = popup_overlay.toggle(
+                                event_loop,
+                                popup_proxy.clone(),
+                                snapshot,
+                                &state.settings,
+                                popup_anchor,
+                            ) {
+                                let _ = append_runtime_log(
+                                    &log_config,
+                                    "popup-error",
+                                    &err.to_string(),
+                                );
+                            }
+                        }
                     } else if event.id == refresh_id {
+                        if popup_overlay.is_visible() {
+                            popup_overlay.show_loading();
+                        }
                         match refresh_state(
                             &mut state,
                             &log_config,
@@ -184,12 +230,21 @@ fn run_platform_tray(
                                 }
                                 show_notification_events(&events);
                                 last_refresh = Instant::now();
-                                open_popup_window(
-                                    &log_config,
-                                    popup_anchor,
-                                    &mut popup_child,
-                                    false,
-                                );
+                                if let Some(snapshot) = &state.snapshot {
+                                    if let Err(err) = popup_overlay.show_or_create(
+                                        event_loop,
+                                        popup_proxy.clone(),
+                                        snapshot,
+                                        &state.settings,
+                                        popup_anchor,
+                                    ) {
+                                        let _ = append_runtime_log(
+                                            &log_config,
+                                            "popup-error",
+                                            &err.to_string(),
+                                        );
+                                    }
+                                }
                             }
                             Err(err) => {
                                 let _ =
@@ -197,7 +252,21 @@ fn run_platform_tray(
                             }
                         }
                     } else if event.id == settings_id {
-                        show_popup("QMeter Settings", &render_settings_text(&state));
+                        if let Some(snapshot) = &state.snapshot {
+                            if let Err(err) = popup_overlay.show_settings(
+                                event_loop,
+                                popup_proxy.clone(),
+                                snapshot,
+                                &state.settings,
+                                popup_anchor,
+                            ) {
+                                let _ = append_runtime_log(
+                                    &log_config,
+                                    "settings-popup-error",
+                                    &err.to_string(),
+                                );
+                            }
+                        }
                     }
                 }
                 Event::UserEvent(UserEvent::Tray(event)) => {
@@ -210,24 +279,148 @@ fn run_platform_tray(
                             button_state: MouseButtonState::Up,
                             position,
                             ..
-                        } => open_popup_window(
-                            &log_config,
-                            Some((position.x, position.y)),
-                            &mut popup_child,
-                            true,
-                        ),
+                        } => {
+                            if let Some(snapshot) = &state.snapshot {
+                                if let Err(err) = popup_overlay.toggle(
+                                    event_loop,
+                                    popup_proxy.clone(),
+                                    snapshot,
+                                    &state.settings,
+                                    Some((position.x, position.y)),
+                                ) {
+                                    let _ = append_runtime_log(
+                                        &log_config,
+                                        "popup-error",
+                                        &err.to_string(),
+                                    );
+                                }
+                            }
+                        }
                         TrayIconEvent::DoubleClick {
                             button: MouseButton::Left,
                             position,
                             ..
-                        } => open_popup_window(
-                            &log_config,
-                            Some((position.x, position.y)),
-                            &mut popup_child,
-                            true,
-                        ),
+                        } => {
+                            if let Some(snapshot) = &state.snapshot {
+                                if let Err(err) = popup_overlay.toggle(
+                                    event_loop,
+                                    popup_proxy.clone(),
+                                    snapshot,
+                                    &state.settings,
+                                    Some((position.x, position.y)),
+                                ) {
+                                    let _ = append_runtime_log(
+                                        &log_config,
+                                        "popup-error",
+                                        &err.to_string(),
+                                    );
+                                }
+                            }
+                        }
                         _ => {}
                     }
+                }
+                Event::UserEvent(UserEvent::PopupRefresh) => {
+                    match refresh_state(
+                        &mut state,
+                        &log_config,
+                        true,
+                        Some(&mut notification_state),
+                    ) {
+                        Ok(events) => {
+                            if let Err(err) =
+                                save_notification_state(&notification_config, &notification_state)
+                            {
+                                let _ = append_runtime_log(
+                                    &log_config,
+                                    "notification-state-error",
+                                    &err.to_string(),
+                                );
+                            }
+                            show_notification_events(&events);
+                            last_refresh = Instant::now();
+                            if let Some(snapshot) = &state.snapshot {
+                                popup_overlay.update_snapshot(snapshot);
+                            }
+                        }
+                        Err(err) => {
+                            let _ = append_runtime_log(
+                                &log_config,
+                                "popup-refresh-error",
+                                &err.to_string(),
+                            );
+                        }
+                    }
+                }
+                Event::UserEvent(UserEvent::PopupSaveSettings(raw)) => {
+                    let update = serde_json::from_str::<PopupSettingsUpdate>(&raw);
+                    match update {
+                        Ok(update) => {
+                            let next_settings =
+                                apply_popup_settings_update(&state.settings, update);
+                            match save_tray_settings(&settings_config, &next_settings) {
+                                Ok(()) => {
+                                    state.settings = next_settings;
+                                    refresh_interval = Duration::from_millis(
+                                        state.settings.refresh_interval_ms.max(5_000),
+                                    );
+                                    popup_overlay.update_settings(&state.settings);
+                                    match refresh_state(
+                                        &mut state,
+                                        &log_config,
+                                        true,
+                                        Some(&mut notification_state),
+                                    ) {
+                                        Ok(events) => {
+                                            if let Err(err) = save_notification_state(
+                                                &notification_config,
+                                                &notification_state,
+                                            ) {
+                                                let _ = append_runtime_log(
+                                                    &log_config,
+                                                    "notification-state-error",
+                                                    &err.to_string(),
+                                                );
+                                            }
+                                            show_notification_events(&events);
+                                            last_refresh = Instant::now();
+                                            popup_overlay.show_settings_saved(&state.settings);
+                                            if let Some(snapshot) = &state.snapshot {
+                                                popup_overlay.update_snapshot(snapshot);
+                                            }
+                                        }
+                                        Err(err) => {
+                                            popup_overlay.show_settings_error(&err.to_string());
+                                            let _ = append_runtime_log(
+                                                &log_config,
+                                                "settings-refresh-error",
+                                                &err.to_string(),
+                                            );
+                                        }
+                                    }
+                                }
+                                Err(err) => {
+                                    popup_overlay.show_settings_error(&err.to_string());
+                                    let _ = append_runtime_log(
+                                        &log_config,
+                                        "settings-save-error",
+                                        &err.to_string(),
+                                    );
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            popup_overlay.show_settings_error("invalid settings payload");
+                            let _ = append_runtime_log(
+                                &log_config,
+                                "settings-parse-error",
+                                &err.to_string(),
+                            );
+                        }
+                    }
+                }
+                Event::WindowEvent { window_id, event } => {
+                    let _ = popup_overlay.handle_window_event(window_id, &event);
                 }
                 _ => {}
             }
@@ -235,66 +428,6 @@ fn run_platform_tray(
     }
 
     Ok(())
-}
-
-#[cfg(windows)]
-fn open_popup_window(
-    log_config: &RuntimeLogConfig,
-    anchor: Option<(f64, f64)>,
-    popup_child: &mut Option<Child>,
-    toggle_existing: bool,
-) {
-    if let Some(child) = popup_child.as_mut() {
-        match child.try_wait() {
-            Ok(Some(_)) => {
-                *popup_child = None;
-            }
-            Ok(None) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                *popup_child = None;
-                if toggle_existing {
-                    return;
-                }
-            }
-            Err(err) => {
-                let _ = append_runtime_log(log_config, "popup-child-error", &err.to_string());
-                *popup_child = None;
-            }
-        }
-    }
-
-    let popup_path = match std::env::current_exe() {
-        Ok(current_exe) => popup_exe_path(&current_exe),
-        Err(err) => {
-            let _ = append_runtime_log(log_config, "popup-error", &err.to_string());
-            return;
-        }
-    };
-
-    let mut command = std::process::Command::new(&popup_path);
-    if let Some((x, y)) = anchor {
-        command
-            .env("QMETER_POPUP_ANCHOR_X", x.to_string())
-            .env("QMETER_POPUP_ANCHOR_Y", y.to_string());
-    }
-
-    match command.spawn() {
-        Ok(child) => {
-            *popup_child = Some(child);
-        }
-        Err(err) => {
-            let _ = append_runtime_log(
-                log_config,
-                "popup-error",
-                &format!("{}: {err}", popup_path.display()),
-            );
-        }
-    }
-}
-
-fn popup_exe_path(current_exe: &Path) -> std::path::PathBuf {
-    current_exe.with_file_name(format!("qmeter-popup{}", std::env::consts::EXE_SUFFIX))
 }
 
 #[cfg(windows)]
@@ -307,6 +440,16 @@ fn tray_event_position(event: &tray_icon::TrayIconEvent) -> Option<(f64, f64)> {
         | tray_icon::TrayIconEvent::Leave { position, .. } => Some((position.x, position.y)),
         _ => None,
     }
+}
+
+fn apply_popup_settings_update(
+    previous: &TraySettings,
+    update: PopupSettingsUpdate,
+) -> TraySettings {
+    let mut next = previous.clone();
+    next.refresh_interval_ms = update.refresh_interval_ms.clamp(5_000, 60 * 60 * 1000);
+    next.visible_providers = update.visible_providers;
+    next
 }
 
 #[cfg(windows)]
@@ -371,29 +514,32 @@ fn notification_policy_config(state: &TrayState) -> NotificationPolicyConfig {
     }
 }
 
-fn render_settings_text(state: &TrayState) -> String {
-    format!(
-        "Refresh interval: {} seconds\nClaude visible: {}\nCodex visible: {}\nNotifications: warning {}%, critical {}%",
-        state.settings.refresh_interval_ms / 1000,
-        state.settings.visible_providers.claude,
-        state.settings.visible_providers.codex,
-        state.settings.notification.warning_percent,
-        state.settings.notification.critical_percent
-    )
-}
-
-#[cfg(all(test, windows))]
+#[cfg(test)]
 mod tests {
-    use super::popup_exe_path;
-    use std::path::Path;
+    use super::{PopupSettingsUpdate, apply_popup_settings_update};
+    use qmeter_core::settings::{VisibleProviders, default_tray_settings};
 
     #[test]
-    fn popup_exe_path_uses_sibling_binary() {
-        let current = Path::new(r"C:\tools\qmeter-tray.exe");
-        assert_eq!(
-            popup_exe_path(current),
-            Path::new(r"C:\tools\qmeter-popup.exe")
+    fn popup_settings_update_preserves_notification_settings() {
+        let mut prev = default_tray_settings();
+        prev.notification.warning_percent = 70.0;
+        prev.notification.critical_percent = 92.0;
+
+        let next = apply_popup_settings_update(
+            &prev,
+            PopupSettingsUpdate {
+                refresh_interval_ms: 30_000,
+                visible_providers: VisibleProviders {
+                    claude: false,
+                    codex: true,
+                },
+            },
         );
+
+        assert_eq!(next.refresh_interval_ms, 30_000);
+        assert!(!next.visible_providers.claude);
+        assert!(next.visible_providers.codex);
+        assert_eq!(next.notification, prev.notification);
     }
 }
 
@@ -401,6 +547,7 @@ mod tests {
 fn run_platform_tray(
     _state: TrayState,
     _log_config: RuntimeLogConfig,
+    _settings_config: TraySettingsConfig,
     _notification_config: NotificationStoreConfig,
     _notification_state: BTreeMap<String, NotificationState>,
 ) -> Result<(), Box<dyn std::error::Error>> {

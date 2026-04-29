@@ -25,7 +25,7 @@ cargo check -p qmeter-tray
 Run tray:
 
 ```powershell
-cargo build -p qmeter-tray --bins
+cargo build -p qmeter-tray
 cargo run -p qmeter-tray --bin qmeter-tray
 ```
 
@@ -39,7 +39,6 @@ Expected outputs:
 
 - `target/release/qmeter.exe`
 - `target/release/qmeter-tray.exe`
-- `target/release/qmeter-popup.exe`
 
 ## Fixture Mode
 
@@ -50,9 +49,8 @@ $env:USAGE_STATUS_FIXTURE='demo'
 cargo run -p qmeter-cli -- --json
 cargo run -p qmeter-cli -- --view table
 cargo run -p qmeter-cli -- --view graph
-cargo build -p qmeter-tray --bins
+cargo build -p qmeter-tray
 cargo run -p qmeter-tray --bin qmeter-tray
-cargo run -p qmeter-tray --bin qmeter-popup
 ```
 
 ## Environment Variables

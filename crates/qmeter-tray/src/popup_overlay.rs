@@ -1,27 +1,19 @@
-#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
-
+#[cfg(windows)]
+use crate::tray_app::UserEvent;
 #[cfg(windows)]
 use base64::{Engine as _, engine::general_purpose};
 #[cfg(windows)]
-use qmeter_core::cache::{CacheConfig, as_cache_rows, load_cache};
-#[cfg(windows)]
-use qmeter_core::settings::{TraySettingsConfig, load_tray_settings};
-#[cfg(windows)]
-use qmeter_core::snapshot::{CollectOptions, collect_fixture_snapshot, is_fixture_mode_from_env};
+use qmeter_core::settings::TraySettings;
 #[cfg(windows)]
 use qmeter_core::types::{NormalizedSnapshot, ProviderId};
 #[cfg(windows)]
-use qmeter_providers::snapshot::collect_live_snapshot;
-#[cfg(windows)]
 use std::time::{Duration, Instant};
 #[cfg(windows)]
-use winit::application::ApplicationHandler;
-#[cfg(windows)]
-use winit::dpi::{LogicalPosition, LogicalSize};
+use winit::dpi::{LogicalPosition, LogicalSize, Position};
 #[cfg(windows)]
 use winit::event::WindowEvent;
 #[cfg(windows)]
-use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
+use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
 #[cfg(windows)]
 use winit::monitor::MonitorHandle;
 #[cfg(windows)]
@@ -52,102 +44,188 @@ const CLAUDE_PNG: &[u8] = include_bytes!("../../../resources/Claude.png");
 const CODEX_PNG: &[u8] = include_bytes!("../../../resources/Codex.png");
 
 #[cfg(windows)]
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let snapshot = collect_initial_popup_snapshot()?;
-    let size = PopupSize {
-        width: POPUP_WIDTH,
-        height: estimate_window_height(&snapshot),
-    };
-    let anchor = popup_anchor_from_env();
-    let html = render_popup_html(&snapshot);
-
-    let event_loop = EventLoop::<PopupEvent>::with_user_event().build()?;
-    let proxy = event_loop.create_proxy();
-    let mut app = PopupApp {
-        html,
-        size,
-        anchor,
-        proxy,
-        window: None,
-        webview: None,
-        created_at: None,
-        focused_once: false,
-    };
-    event_loop.run_app(&mut app)?;
-    Ok(())
-}
-
-#[cfg(not(windows))]
-fn main() {
-    eprintln!("qmeter-popup is only supported on Windows");
-    std::process::exit(1);
-}
-
-#[cfg(windows)]
-#[derive(Clone, Debug)]
-enum PopupEvent {
-    Refresh,
-}
-
-#[cfg(windows)]
-struct PopupApp {
-    html: String,
-    size: PopupSize,
-    anchor: Option<PopupPoint>,
-    proxy: EventLoopProxy<PopupEvent>,
+pub(crate) struct PopupOverlay {
     window: Option<Window>,
     webview: Option<WebView>,
     created_at: Option<Instant>,
     focused_once: bool,
+    visible: bool,
 }
 
 #[cfg(windows)]
-impl ApplicationHandler<PopupEvent> for PopupApp {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.window.is_some() {
-            return;
+impl PopupOverlay {
+    pub(crate) fn new() -> Self {
+        Self {
+            window: None,
+            webview: None,
+            created_at: None,
+            focused_once: false,
+            visible: false,
+        }
+    }
+
+    pub(crate) fn is_visible(&self) -> bool {
+        self.visible
+    }
+
+    pub(crate) fn toggle(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        proxy: EventLoopProxy<UserEvent>,
+        snapshot: &NormalizedSnapshot,
+        settings: &TraySettings,
+        anchor: Option<(f64, f64)>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if self.visible {
+            self.hide();
+            return Ok(());
+        }
+
+        self.show_or_create(event_loop, proxy, snapshot, settings, anchor)
+    }
+
+    pub(crate) fn show_or_create(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        proxy: EventLoopProxy<UserEvent>,
+        snapshot: &NormalizedSnapshot,
+        settings: &TraySettings,
+        anchor: Option<(f64, f64)>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let size = PopupSize {
+            width: POPUP_WIDTH,
+            height: estimate_window_height(snapshot),
+        };
+        let anchor = anchor.map(|(x, y)| PopupPoint { x, y });
+
+        if let Some(window) = self.window.as_ref() {
+            let _ = window.request_inner_size(LogicalSize::new(size.width, size.height));
+            if let Some(position) = popup_position_for_display(event_loop, anchor, size) {
+                window.set_outer_position(Position::Logical(LogicalPosition::new(
+                    position.x, position.y,
+                )));
+            }
+            self.created_at = Some(Instant::now());
+            self.focused_once = false;
+            window.set_visible(true);
+            window.focus_window();
+            self.visible = true;
+            self.update_snapshot(snapshot);
+            self.update_settings(settings);
+            return Ok(());
         }
 
         let mut attrs = Window::default_attributes()
             .with_title("QMeter")
-            .with_inner_size(LogicalSize::new(self.size.width, self.size.height))
+            .with_inner_size(LogicalSize::new(size.width, size.height))
             .with_decorations(false)
             .with_resizable(false)
             .with_window_level(WindowLevel::AlwaysOnTop)
             .with_skip_taskbar(true)
+            .with_transparent(true)
+            .with_undecorated_shadow(false)
             .with_visible(true);
 
-        if let Some(position) = popup_position_for_display(event_loop, self.anchor, self.size) {
+        if let Some(position) = popup_position_for_display(event_loop, anchor, size) {
             attrs = attrs.with_position(LogicalPosition::new(position.x, position.y));
         }
 
-        let window = event_loop
-            .create_window(attrs)
-            .expect("create popup window");
-        let proxy = self.proxy.clone();
+        let window = event_loop.create_window(attrs)?;
         let webview = WebViewBuilder::new()
-            .with_html(self.html.clone())
+            .with_transparent(true)
+            .with_html(render_popup_html(snapshot, settings))
             .with_ipc_handler(move |request| {
-                if request.body() == "refresh" {
-                    let _ = proxy.send_event(PopupEvent::Refresh);
+                let body = request.body();
+                if body == "refresh" {
+                    let _ = proxy.send_event(UserEvent::PopupRefresh);
+                } else if let Some(json) = body.strip_prefix("settings:save:") {
+                    let _ = proxy.send_event(UserEvent::PopupSaveSettings(json.to_string()));
                 }
             })
-            .build(&window)
-            .expect("create popup webview");
+            .build(&window)?;
 
         self.webview = Some(webview);
         self.window = Some(window);
         self.created_at = Some(Instant::now());
+        self.focused_once = false;
+        self.visible = true;
+        if let Some(window) = self.window.as_ref() {
+            window.focus_window();
+        }
+        Ok(())
     }
 
-    fn window_event(
+    pub(crate) fn show_settings(
         &mut self,
         event_loop: &ActiveEventLoop,
-        _window_id: WindowId,
-        event: WindowEvent,
-    ) {
+        proxy: EventLoopProxy<UserEvent>,
+        snapshot: &NormalizedSnapshot,
+        settings: &TraySettings,
+        anchor: Option<(f64, f64)>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        self.show_or_create(event_loop, proxy, snapshot, settings, anchor)?;
+        self.open_settings(settings);
+        Ok(())
+    }
+
+    pub(crate) fn update_snapshot(&self, snapshot: &NormalizedSnapshot) {
+        if let Some(webview) = self.webview.as_ref() {
+            let script = format!("window.__render({});", snapshot_json(snapshot));
+            let _ = webview.evaluate_script(&script);
+        }
+    }
+
+    pub(crate) fn show_loading(&self) {
+        if let Some(webview) = self.webview.as_ref() {
+            let _ = webview.evaluate_script("window.__setLoading && window.__setLoading();");
+        }
+    }
+
+    pub(crate) fn update_settings(&self, settings: &TraySettings) {
+        if let Some(webview) = self.webview.as_ref() {
+            let script = format!(
+                "window.__setSettings && window.__setSettings({});",
+                settings_json(settings)
+            );
+            let _ = webview.evaluate_script(&script);
+        }
+    }
+
+    pub(crate) fn open_settings(&self, settings: &TraySettings) {
+        if let Some(webview) = self.webview.as_ref() {
+            let script = format!(
+                "window.__openSettings && window.__openSettings({});",
+                settings_json(settings)
+            );
+            let _ = webview.evaluate_script(&script);
+        }
+    }
+
+    pub(crate) fn show_settings_saved(&self, settings: &TraySettings) {
+        if let Some(webview) = self.webview.as_ref() {
+            let script = format!(
+                "window.__settingsSaved && window.__settingsSaved({});",
+                settings_json(settings)
+            );
+            let _ = webview.evaluate_script(&script);
+        }
+    }
+
+    pub(crate) fn show_settings_error(&self, message: &str) {
+        if let Some(webview) = self.webview.as_ref() {
+            let msg = serde_json::to_string(message).unwrap_or_else(|_| "\"error\"".to_string());
+            let script = format!("window.__settingsError && window.__settingsError({msg});");
+            let _ = webview.evaluate_script(&script);
+        }
+    }
+
+    pub(crate) fn handle_window_event(&mut self, window_id: WindowId, event: &WindowEvent) -> bool {
+        if self.window.as_ref().map(Window::id) != Some(window_id) {
+            return false;
+        }
+
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::CloseRequested => self.hide(),
             WindowEvent::Focused(true) => {
                 self.focused_once = true;
             }
@@ -157,82 +235,20 @@ impl ApplicationHandler<PopupEvent> for PopupApp {
                     .map(|time| time.elapsed())
                     .unwrap_or_default();
                 if should_close_on_focus_loss(self.focused_once, age) {
-                    event_loop.exit();
+                    self.hide();
                 }
             }
             _ => {}
         }
+        true
     }
 
-    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: PopupEvent) {
-        match event {
-            PopupEvent::Refresh => {
-                if let (Some(webview), Ok(snapshot)) =
-                    (self.webview.as_ref(), collect_popup_snapshot(true))
-                {
-                    let script = format!("window.__render({});", snapshot_json(&snapshot));
-                    let _ = webview.evaluate_script(&script);
-                }
-            }
+    fn hide(&mut self) {
+        if let Some(window) = self.window.as_ref() {
+            window.set_visible(false);
         }
+        self.visible = false;
     }
-}
-
-#[cfg(windows)]
-fn collect_initial_popup_snapshot() -> Result<NormalizedSnapshot, String> {
-    if is_fixture_mode_from_env() {
-        return collect_popup_snapshot(false);
-    }
-
-    let settings = load_tray_settings(&TraySettingsConfig::from_env())
-        .map_err(|err| format!("Failed to load settings: {err}"))?;
-    let cache = load_cache(CacheConfig::from_env())
-        .map_err(|err| format!("Failed to load usage cache: {err}"))?;
-    let mut rows = Vec::new();
-    if settings.visible_providers.claude {
-        if let Some(entry) = cache.providers.get(&ProviderId::Claude) {
-            rows.extend(as_cache_rows(&entry.rows, false, Some("cached")));
-        }
-    }
-    if settings.visible_providers.codex {
-        if let Some(entry) = cache.providers.get(&ProviderId::Codex) {
-            rows.extend(as_cache_rows(&entry.rows, false, Some("cached")));
-        }
-    }
-
-    if rows.is_empty() {
-        return collect_popup_snapshot(false);
-    }
-
-    Ok(NormalizedSnapshot {
-        fetched_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-        rows,
-        errors: Vec::new(),
-    })
-}
-
-#[cfg(windows)]
-fn collect_popup_snapshot(force_refresh: bool) -> Result<NormalizedSnapshot, String> {
-    let settings = load_tray_settings(&TraySettingsConfig::from_env())
-        .map_err(|err| format!("Failed to load settings: {err}"))?;
-    let mut providers = Vec::new();
-    if settings.visible_providers.claude {
-        providers.push(ProviderId::Claude);
-    }
-    if settings.visible_providers.codex {
-        providers.push(ProviderId::Codex);
-    }
-    let opts = CollectOptions {
-        refresh: force_refresh,
-        debug: false,
-        providers,
-    };
-
-    Ok(if is_fixture_mode_from_env() {
-        collect_fixture_snapshot(&opts)
-    } else {
-        collect_live_snapshot(&opts).snapshot
-    })
 }
 
 #[cfg(windows)]
@@ -247,19 +263,6 @@ struct PopupPoint {
 struct PopupSize {
     width: f64,
     height: f64,
-}
-
-#[cfg(windows)]
-fn popup_anchor_from_env() -> Option<PopupPoint> {
-    let x = std::env::var("QMETER_POPUP_ANCHOR_X")
-        .ok()?
-        .parse::<f64>()
-        .ok()?;
-    let y = std::env::var("QMETER_POPUP_ANCHOR_Y")
-        .ok()?
-        .parse::<f64>()
-        .ok()?;
-    Some(PopupPoint { x, y })
 }
 
 #[cfg(all(test, windows))]
@@ -346,8 +349,9 @@ fn estimate_window_height(snapshot: &NormalizedSnapshot) -> f64 {
 }
 
 #[cfg(windows)]
-fn render_popup_html(snapshot: &NormalizedSnapshot) -> String {
+fn render_popup_html(snapshot: &NormalizedSnapshot, settings: &TraySettings) -> String {
     let snapshot = snapshot_json(snapshot);
+    let settings = settings_json(settings);
     let qmeter_logo = image_data_url(QMETER_PNG);
     let claude_logo = image_data_url(CLAUDE_PNG);
     let codex_logo = image_data_url(CODEX_PNG);
@@ -356,8 +360,8 @@ fn render_popup_html(snapshot: &NormalizedSnapshot) -> String {
 <html><head><meta charset="utf-8" />
 <title>QMeter</title>
 <style>
-  html,body{{margin:0;padding:0;overflow:hidden;background:#05070A;color:#fff;font-family:"Segoe UI",sans-serif}}
-  body{{box-sizing:border-box;width:100vw;height:100vh;background:#05070A}}
+  html,body{{margin:0;padding:0;overflow:hidden;background:transparent;color:#fff;font-family:"Segoe UI",sans-serif}}
+  body{{box-sizing:border-box;width:100vw;height:100vh;background:transparent}}
   .panel{{position:relative;width:100vw;height:100vh;background:radial-gradient(600px 360px at 50% 10%,rgba(79,70,229,.18),transparent 60%),rgba(11,15,25,.96);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.10);border-radius:18px;overflow:hidden;box-shadow:0 28px 48px rgba(0,0,0,.45)}}
   .header{{padding:18px 22px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;justify-content:space-between;align-items:center;background:linear-gradient(to bottom,rgba(255,255,255,.06),transparent)}}
   .title{{font-size:20px;font-weight:800;letter-spacing:.2px;display:flex;align-items:center;gap:8px}}
@@ -366,8 +370,12 @@ fn render_popup_html(snapshot: &NormalizedSnapshot) -> String {
   .sub .mono{{font-family:Consolas,monospace;color:#cfd6e6}}
   .btn{{border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);color:#d1d5db;border-radius:12px;padding:9px 14px;font-weight:600;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:7px}}
   .btn:hover{{background:rgba(255,255,255,.11);color:#fff;border-color:rgba(255,255,255,.24)}}
+  .btn.secondary{{padding:9px 11px}}
   .btnSpin{{display:inline-block;transition:transform .6s linear}}
   .btn.spinning .btnSpin{{transform:rotate(360deg)}}
+  .btn.spinning .btnSpin{{animation:spin .7s linear infinite}}
+  .btn[disabled]{{opacity:.62;cursor:not-allowed}}
+  .btnRow{{display:flex;align-items:center;gap:8px}}
   .content{{padding:20px;display:grid;gap:18px}}
   .provider{{position:relative;background:#121827;border:1px solid rgba(255,255,255,.07);border-radius:18px;padding:18px;overflow:hidden}}
   .provider::after{{content:"";position:absolute;right:-18px;top:-18px;width:150px;height:150px;border-radius:999px;filter:blur(55px);opacity:.2;pointer-events:none}}
@@ -400,18 +408,72 @@ fn render_popup_html(snapshot: &NormalizedSnapshot) -> String {
   .metaLabel{{font-size:11px;color:#9ca3af;font-weight:700}}
   .reset{{font-family:Consolas,"Malgun Gothic",monospace;font-size:11px;color:#cbd5e1;padding:2px 0;text-align:right}}
   .empty{{padding:16px;background:#121827;border:1px solid rgba(255,255,255,.08);border-radius:14px;color:#9ca3af}}
+  .skeleton{{position:relative;overflow:hidden;background:#121827;border:1px solid rgba(255,255,255,.07);border-radius:18px;padding:18px}}
+  .skeleton::after{{content:"";position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,rgba(255,255,255,.09),transparent);animation:shimmer 1.25s infinite}}
+  .skLine{{height:12px;background:rgba(255,255,255,.08);border-radius:999px;margin-bottom:12px}}
+  .skLine.title{{width:42%;height:18px;margin-bottom:20px}}
+  .skLine.mid{{width:72%}}
+  .skLine.full{{width:100%;height:10px}}
+  .skLine.short{{width:35%;margin-left:auto;margin-bottom:0}}
+  .settingsBackdrop{{position:fixed;inset:0;background:rgba(2,5,12,.66);display:none;align-items:center;justify-content:center;z-index:50}}
+  .settingsBackdrop.show{{display:flex}}
+  .settingsModal{{width:380px;max-width:92vw;background:#101726;border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:16px;box-shadow:0 20px 40px rgba(0,0,0,.45)}}
+  .settingsTitle{{font-size:16px;font-weight:800;margin-bottom:12px}}
+  .field{{margin-bottom:12px}}
+  .field label{{display:block;font-size:12px;color:#a9b5cc;margin-bottom:6px}}
+  .select{{width:100%;background:#0f1423;color:#e6ebf7;border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:8px}}
+  .checks{{display:grid;gap:8px}}
+  .checkRow{{display:flex!important;align-items:center;gap:8px;color:#dbe4ff;font-size:13px;margin:0!important}}
+  .chk{{accent-color:#6366f1}}
+  .actions{{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}}
+  .saveHint{{margin-top:8px;min-height:18px;font-size:12px;color:#a9b5cc}}
+  .saveHint.ok{{color:#86efac}}
+  .saveHint.err{{color:#fca5a5}}
+  @keyframes shimmer{{100%{{transform:translateX(100%)}}}}
+  @keyframes spin{{to{{transform:rotate(360deg)}}}}
 </style></head>
 <body><div class="panel">
   <div class="header">
     <div><div class="title"><img class="titleLogo" src="{qmeter_logo}" alt="" />QMeter <span style="font-size:12px;color:#9ca3af;font-weight:700">v0.1.8</span></div>
     <div class="sub">마지막 확인: <span class="mono" id="lastChecked">-</span></div></div>
-    <button class="btn" id="refresh"><span class="btnSpin">↻</span><span>새로고침</span></button>
+    <div class="btnRow">
+      <button class="btn secondary" id="openSettings" title="환경설정">⚙</button>
+      <button class="btn" id="refresh"><span class="btnSpin">↻</span><span>새로고침</span></button>
+    </div>
   </div>
   <div class="content" id="cards"></div>
+</div>
+<div class="settingsBackdrop" id="settingsBackdrop">
+  <div class="settingsModal">
+    <div class="settingsTitle">환경설정</div>
+    <div class="field">
+      <label for="refreshInterval">새로고침 주기</label>
+      <select class="select" id="refreshInterval">
+        <option value="10000">10초</option>
+        <option value="30000">30초</option>
+        <option value="60000">1분</option>
+        <option value="300000">5분</option>
+        <option value="600000">10분</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>보여줄 카드</label>
+      <div class="checks">
+        <label class="checkRow"><input class="chk" type="checkbox" id="showClaude" /> Claude</label>
+        <label class="checkRow"><input class="chk" type="checkbox" id="showCodex" /> Codex</label>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn secondary" id="cancelSettings">취소</button>
+      <button class="btn" id="saveSettings">저장</button>
+    </div>
+    <div class="saveHint" id="saveHint"></div>
+  </div>
 </div>
 <script>
 const CLAUDE_LOGO = "{claude_logo}";
 const CODEX_LOGO = "{codex_logo}";
+let currentSettings = {settings};
 const fmt = (raw) => {{
   const d = new Date(raw);
   if (Number.isNaN(d.getTime())) return raw || "-";
@@ -432,7 +494,57 @@ function progress(row) {{
     <div class="rowBottom"><span class="metaLabel">초기화 일시</span><span class="reset">${{fmt(row.resetAt)}}</span></div>
   </div>`;
 }}
+function skeletonCard() {{
+  return `<div class="skeleton">
+    <div class="skLine title"></div>
+    <div class="skLine mid"></div>
+    <div class="skLine full"></div>
+    <div class="skLine short"></div>
+  </div>`;
+}}
+window.__setLoading = () => {{
+  document.getElementById("cards").innerHTML = skeletonCard() + skeletonCard();
+}};
+function applySettings(settings) {{
+  currentSettings = settings || currentSettings;
+  const interval = document.getElementById("refreshInterval");
+  const claude = document.getElementById("showClaude");
+  const codex = document.getElementById("showCodex");
+  if (interval) interval.value = String(currentSettings.refreshIntervalMs || 60000);
+  if (claude) claude.checked = !!(currentSettings.visibleProviders && currentSettings.visibleProviders.claude);
+  if (codex) codex.checked = !!(currentSettings.visibleProviders && currentSettings.visibleProviders.codex);
+}}
+function setSaving(saving, message, cls) {{
+  const save = document.getElementById("saveSettings");
+  const cancel = document.getElementById("cancelSettings");
+  const hint = document.getElementById("saveHint");
+  if (save) {{
+    save.disabled = saving;
+    save.textContent = saving ? "저장 중..." : "저장";
+  }}
+  if (cancel) cancel.disabled = saving;
+  if (hint) {{
+    hint.textContent = message || "";
+    hint.className = cls ? `saveHint ${{cls}}` : "saveHint";
+  }}
+}}
+window.__setSettings = applySettings;
+window.__openSettings = (settings) => {{
+  applySettings(settings);
+  setSaving(false, "", "");
+  document.getElementById("settingsBackdrop").classList.add("show");
+}};
+window.__settingsSaved = (settings) => {{
+  applySettings(settings);
+  setSaving(false, "저장되었습니다.", "ok");
+  document.getElementById("settingsBackdrop").classList.remove("show");
+}};
+window.__settingsError = (message) => {{
+  setSaving(false, message || "저장 실패. 다시 시도해주세요.", "err");
+}};
 window.__render = (snapshot) => {{
+  const refreshBtn = document.getElementById("refresh");
+  if (refreshBtn) refreshBtn.classList.remove("spinning");
   const providers = ["claude","codex"];
   const cards = providers.map((provider) => {{
     const rows = (snapshot.rows || []).filter(r => r.provider === provider);
@@ -452,9 +564,35 @@ window.__render = (snapshot) => {{
 document.getElementById("refresh").addEventListener("click", () => {{
   const btn = document.getElementById("refresh");
   btn.classList.add("spinning");
+  window.__setLoading();
   window.ipc.postMessage("refresh");
-  setTimeout(() => btn.classList.remove("spinning"), 700);
 }});
+document.getElementById("openSettings").addEventListener("click", () => {{
+  window.__openSettings(currentSettings);
+}});
+document.getElementById("cancelSettings").addEventListener("click", () => {{
+  document.getElementById("settingsBackdrop").classList.remove("show");
+  setSaving(false, "", "");
+}});
+document.getElementById("settingsBackdrop").addEventListener("click", (event) => {{
+  if (event.target === document.getElementById("settingsBackdrop")) {{
+    document.getElementById("settingsBackdrop").classList.remove("show");
+    setSaving(false, "", "");
+  }}
+}});
+document.getElementById("saveSettings").addEventListener("click", () => {{
+  const payload = {{
+    refreshIntervalMs: Number(document.getElementById("refreshInterval").value || 60000),
+    visibleProviders: {{
+      claude: document.getElementById("showClaude").checked,
+      codex: document.getElementById("showCodex").checked,
+    }},
+  }};
+  setSaving(true, "설정을 저장하고 있습니다...", "");
+  window.__setLoading();
+  window.ipc.postMessage("settings:save:" + JSON.stringify(payload));
+}});
+applySettings(currentSettings);
 window.__render({snapshot});
 </script></body></html>"##
     )
@@ -463,6 +601,11 @@ window.__render({snapshot});
 #[cfg(windows)]
 fn snapshot_json(snapshot: &NormalizedSnapshot) -> String {
     serde_json::to_string(snapshot).unwrap_or_else(|_| "{}".to_string())
+}
+
+#[cfg(windows)]
+fn settings_json(settings: &TraySettings) -> String {
+    serde_json::to_string(settings).unwrap_or_else(|_| "{}".to_string())
 }
 
 #[cfg(windows)]
@@ -477,8 +620,9 @@ fn image_data_url(bytes: &[u8]) -> String {
 mod tests {
     use super::{
         PopupPoint, PopupScreen, PopupSize, estimate_window_height, popup_position_for_anchor,
-        popup_position_for_screen, should_close_on_focus_loss,
+        popup_position_for_screen, render_popup_html, should_close_on_focus_loss,
     };
+    use qmeter_core::settings::default_tray_settings;
     use qmeter_core::types::{
         Confidence, NormalizedRow, NormalizedSnapshot, ProviderId, SourceKind,
     };
@@ -545,6 +689,23 @@ mod tests {
         };
 
         assert_eq!(estimate_window_height(&snapshot), 640.0);
+    }
+
+    #[test]
+    fn popup_html_exposes_skeleton_and_settings_contract() {
+        let snapshot = NormalizedSnapshot {
+            fetched_at: "2026-04-29T00:00:00Z".to_string(),
+            rows: vec![row(ProviderId::Claude, "claude:5h")],
+            errors: Vec::new(),
+        };
+        let html = render_popup_html(&snapshot, &default_tray_settings());
+
+        assert!(html.contains("window.__setLoading"));
+        assert!(html.contains("skeleton"));
+        assert!(html.contains("id=\"settingsBackdrop\""));
+        assert!(html.contains("id=\"refreshInterval\""));
+        assert!(html.contains("id=\"showClaude\""));
+        assert!(html.contains("settings:save:"));
     }
 
     fn row(provider: ProviderId, window: &str) -> NormalizedRow {

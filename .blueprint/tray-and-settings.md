@@ -8,7 +8,7 @@ Runtime implementation lives in:
 
 - [`tray_app.rs`](../crates/qmeter-tray/src/tray_app.rs)
 - [`tray_state.rs`](../crates/qmeter-tray/src/tray_state.rs)
-- [`popup_main.rs`](../crates/qmeter-tray/src/popup_main.rs)
+- [`popup_overlay.rs`](../crates/qmeter-tray/src/popup_overlay.rs)
 - [`runtime_log.rs`](../crates/qmeter-tray/src/runtime_log.rs)
 - [`notification_store.rs`](../crates/qmeter-tray/src/notification_store.rs)
 
@@ -21,11 +21,11 @@ The tray creates a Windows tray icon and context menu with:
 - `Settings`
 - `Quit`
 
-The usage popup is a Rust-native `qmeter-popup.exe` WebView2 overlay launched as a sibling process by the tray. The tray passes the last tray click position so the popup opens above the tray area instead of centered on the screen. It renders the legacy HTML/CSS provider cards with progress bars, reset timing, and a manual refresh action.
+The usage popup is a Rust-native WebView2 overlay owned by the `qmeter-tray.exe` process. The tray keeps one overlay instance alive after first creation, hides/shows the same window on tray clicks, and updates existing WebView content with JavaScript when snapshots change. The tray passes the last tray click position so the overlay opens above the tray area instead of centered on the screen. It renders the legacy HTML/CSS provider cards with progress bars, reset timing, and a manual refresh action.
 
-The popup formats timestamps for local display as `YYYY-MM-DD HH:mm:ss`. The tray tracks the child popup process and kills/replaces it before opening another popup, so repeated tray clicks cannot accumulate orphan popup processes.
+The popup formats timestamps for local display as `YYYY-MM-DD HH:mm:ss`. Repeated tray clicks must not spawn additional processes or recreate the WebView after the first overlay exists.
 
-Notification and simple settings summaries can still use native message dialogs. The primary usage surface should stay in `qmeter-popup.exe` so the tray event loop remains small and the GUI can own its own window loop.
+Notification and simple settings summaries can still use native message dialogs. The primary usage surface should stay inside the tray process so overlay display is immediate and cannot leave orphan popup processes.
 
 ## Refresh Loop
 

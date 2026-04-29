@@ -9,10 +9,6 @@ authors.workspace = true
 name = "qmeter-tray"
 path = "src/main.rs"
 
-[[bin]]
-name = "qmeter-popup"
-path = "src/popup_main.rs"
-
 [dependencies]
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
