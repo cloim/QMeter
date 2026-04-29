@@ -3,6 +3,8 @@
 #[cfg(windows)]
 use base64::{Engine as _, engine::general_purpose};
 #[cfg(windows)]
+use qmeter_core::cache::{CacheConfig, as_cache_rows, load_cache};
+#[cfg(windows)]
 use qmeter_core::settings::{TraySettingsConfig, load_tray_settings};
 #[cfg(windows)]
 use qmeter_core::snapshot::{CollectOptions, collect_fixture_snapshot, is_fixture_mode_from_env};
@@ -39,6 +41,8 @@ const BODY_PADDING_Y: f64 = 60.0;
 const CARD_HEIGHT: f64 = 238.0;
 #[cfg(windows)]
 const CARD_GAP: f64 = 18.0;
+#[cfg(windows)]
+const TASKBAR_HEIGHT: f64 = 48.0;
 
 #[cfg(windows)]
 const QMETER_PNG: &[u8] = include_bytes!("../../../resources/QMeter.png");
@@ -49,7 +53,7 @@ const CODEX_PNG: &[u8] = include_bytes!("../../../resources/Codex.png");
 
 #[cfg(windows)]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let snapshot = collect_popup_snapshot(false)?;
+    let snapshot = collect_initial_popup_snapshot()?;
     let size = PopupSize {
         width: POPUP_WIDTH,
         height: estimate_window_height(&snapshot),
@@ -109,7 +113,6 @@ impl ApplicationHandler<PopupEvent> for PopupApp {
             .with_inner_size(LogicalSize::new(self.size.width, self.size.height))
             .with_decorations(false)
             .with_resizable(false)
-            .with_transparent(true)
             .with_window_level(WindowLevel::AlwaysOnTop)
             .with_skip_taskbar(true)
             .with_visible(true);
@@ -124,7 +127,6 @@ impl ApplicationHandler<PopupEvent> for PopupApp {
         let proxy = self.proxy.clone();
         let webview = WebViewBuilder::new()
             .with_html(self.html.clone())
-            .with_transparent(true)
             .with_ipc_handler(move |request| {
                 if request.body() == "refresh" {
                     let _ = proxy.send_event(PopupEvent::Refresh);
@@ -174,6 +176,39 @@ impl ApplicationHandler<PopupEvent> for PopupApp {
             }
         }
     }
+}
+
+#[cfg(windows)]
+fn collect_initial_popup_snapshot() -> Result<NormalizedSnapshot, String> {
+    if is_fixture_mode_from_env() {
+        return collect_popup_snapshot(false);
+    }
+
+    let settings = load_tray_settings(&TraySettingsConfig::from_env())
+        .map_err(|err| format!("Failed to load settings: {err}"))?;
+    let cache = load_cache(CacheConfig::from_env())
+        .map_err(|err| format!("Failed to load usage cache: {err}"))?;
+    let mut rows = Vec::new();
+    if settings.visible_providers.claude {
+        if let Some(entry) = cache.providers.get(&ProviderId::Claude) {
+            rows.extend(as_cache_rows(&entry.rows, false, Some("cached")));
+        }
+    }
+    if settings.visible_providers.codex {
+        if let Some(entry) = cache.providers.get(&ProviderId::Codex) {
+            rows.extend(as_cache_rows(&entry.rows, false, Some("cached")));
+        }
+    }
+
+    if rows.is_empty() {
+        return collect_popup_snapshot(false);
+    }
+
+    Ok(NormalizedSnapshot {
+        fetched_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        rows,
+        errors: Vec::new(),
+    })
 }
 
 #[cfg(windows)]
@@ -284,8 +319,8 @@ struct PopupScreen {
 #[cfg(windows)]
 fn popup_position_for_screen(screen: PopupScreen, popup: PopupSize) -> PopupPoint {
     PopupPoint {
-        x: (screen.x + screen.width - popup.width - 16.0).max(screen.x),
-        y: (screen.y + screen.height - popup.height - 64.0).max(screen.y),
+        x: (screen.x + screen.width - popup.width).max(screen.x),
+        y: (screen.y + screen.height - TASKBAR_HEIGHT - popup.height).max(screen.y),
     }
 }
 
@@ -321,9 +356,9 @@ fn render_popup_html(snapshot: &NormalizedSnapshot) -> String {
 <html><head><meta charset="utf-8" />
 <title>QMeter</title>
 <style>
-  html,body{{margin:0;padding:0;overflow:hidden;background:transparent;color:#fff;font-family:"Segoe UI",sans-serif}}
-  body{{box-sizing:border-box;width:100vw;height:100vh;padding:10px;background:transparent}}
-  .panel{{position:relative;width:calc(100vw - 20px);height:calc(100vh - 20px);background:radial-gradient(600px 360px at 50% 10%,rgba(79,70,229,.18),transparent 60%),rgba(11,15,25,.93);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.10);border-radius:18px;overflow:hidden;box-shadow:0 28px 48px rgba(0,0,0,.45)}}
+  html,body{{margin:0;padding:0;overflow:hidden;background:#05070A;color:#fff;font-family:"Segoe UI",sans-serif}}
+  body{{box-sizing:border-box;width:100vw;height:100vh;background:#05070A}}
+  .panel{{position:relative;width:100vw;height:100vh;background:radial-gradient(600px 360px at 50% 10%,rgba(79,70,229,.18),transparent 60%),rgba(11,15,25,.96);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.10);border-radius:18px;overflow:hidden;box-shadow:0 28px 48px rgba(0,0,0,.45)}}
   .header{{padding:18px 22px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;justify-content:space-between;align-items:center;background:linear-gradient(to bottom,rgba(255,255,255,.06),transparent)}}
   .title{{font-size:20px;font-weight:800;letter-spacing:.2px;display:flex;align-items:center;gap:8px}}
   .titleLogo{{width:18px;height:18px;object-fit:contain;display:block}}
@@ -481,8 +516,8 @@ mod tests {
             },
         );
 
-        assert_eq!(pos.x, 1344.0);
-        assert_eq!(pos.y, 376.0);
+        assert_eq!(pos.x, 1360.0);
+        assert_eq!(pos.y, 392.0);
     }
 
     #[test]
