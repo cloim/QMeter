@@ -58,7 +58,8 @@ cargo run -p qmeter-tray --bin qmeter-tray
 ## Environment Variables
 
 - `USAGE_STATUS_FIXTURE=demo`: deterministic sample rows
-- `USAGE_STATUS_CODEX_COMMAND`: Codex command override
+- `USAGE_STATUS_CODEX_AUTH_PATH`: Codex auth file override
+- `USAGE_STATUS_CODEX_BASE_URL`: Codex usage API base URL override
 - `USAGE_STATUS_CACHE_PATH`: cache file override
 - `USAGE_STATUS_CACHE_TTL_SECS`: cache TTL override
 - `USAGE_STATUS_TRAY_SETTINGS_PATH`: tray settings file override

@@ -46,9 +46,17 @@ Credential lookup:
 
 ### Codex
 
-[`crates/qmeter-providers/src/codex.rs`](../crates/qmeter-providers/src/codex.rs) uses the Codex app-server JSON-RPC path and maps primary/secondary rate limits into normalized rows.
+[`crates/qmeter-providers/src/codex.rs`](../crates/qmeter-providers/src/codex.rs) reads the Codex CLI ChatGPT OAuth token from `~/.codex/auth.json`, calls the Codex usage endpoint directly, and maps primary/secondary rate limits into normalized rows.
 
-`USAGE_STATUS_CODEX_COMMAND` can override the Codex command path.
+Defaults:
+
+- auth path: `%USERPROFILE%\.codex\auth.json` on Windows, or `$CODEX_HOME/auth.json` when `CODEX_HOME` is set
+- usage API base URL: `https://chatgpt.com/backend-api`
+
+Overrides:
+
+- `USAGE_STATUS_CODEX_AUTH_PATH`: Codex auth file override
+- `USAGE_STATUS_CODEX_BASE_URL`: usage API base URL override
 
 ## Tray Runtime
 

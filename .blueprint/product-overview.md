@@ -12,7 +12,7 @@ QMeter is a Rust-native local usage monitor for Claude Code and Codex. It expose
 - Rust stable
 - Windows 11 for the tray surface
 - Claude Code credentials for Claude usage
-- Codex CLI/app-server availability for Codex usage
+- Codex CLI ChatGPT auth file for Codex usage
 
 There is no Node/Electron runtime requirement in the Rust-native app.
 

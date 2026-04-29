@@ -107,8 +107,8 @@ fn non_fixture_codex_uses_live_provider_path() {
         .env_remove("USAGE_STATUS_FIXTURE")
         .env("USAGE_STATUS_CACHE_PATH", &cache_path)
         .env(
-            "USAGE_STATUS_CODEX_COMMAND",
-            "definitely-missing-qmeter-codex-command.exe",
+            "USAGE_STATUS_CODEX_AUTH_PATH",
+            dir.path().join("missing-auth.json"),
         )
         .args(["--json", "--providers", "codex"])
         .assert()
@@ -160,8 +160,8 @@ fn live_provider_failure_falls_back_to_stale_cache_rows() {
         .env("USAGE_STATUS_CACHE_PATH", &cache_path)
         .env("USAGE_STATUS_CACHE_TTL_SECS", "0")
         .env(
-            "USAGE_STATUS_CODEX_COMMAND",
-            "definitely-missing-qmeter-codex-command.exe",
+            "USAGE_STATUS_CODEX_AUTH_PATH",
+            dir.path().join("missing-auth.json"),
         )
         .args(["--json", "--providers", "codex"])
         .assert()

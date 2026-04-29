@@ -22,7 +22,7 @@ QMeter is a Rust-native Windows tray app and CLI for checking Claude Code and Co
 - Rust stable
 - Windows 11 for the tray app
 - Claude Code login for Claude usage
-- Codex CLI login for Codex usage
+- Codex CLI ChatGPT login for Codex usage
 
 ## Build And Run
 
@@ -96,7 +96,7 @@ The tray app:
 
 Claude usage is collected through Claude Code OAuth credentials and Anthropic's usage endpoint. On Windows/Linux, QMeter reads `~/.claude/.credentials.json`; on macOS it tries the `Claude Code-credentials` Keychain item first.
 
-Codex usage is collected through the Codex app-server JSON-RPC integration.
+Codex usage is collected with the ChatGPT OAuth token saved by Codex CLI at `~/.codex/auth.json`. QMeter calls the Codex usage endpoint directly, so refreshes do not spawn `codex.cmd` or `cmd.exe`.
 
 ## Release Binaries
 
@@ -122,5 +122,5 @@ GitHub Actions runs the Rust CI/CD path only when a new `v*` tag is pushed:
 ## Troubleshooting
 
 - Missing Claude rows usually means Claude Code is not logged in or the OAuth credentials file is unavailable.
-- Missing Codex rows usually means Codex CLI is not installed, not logged in, or unavailable on PATH.
+- Missing Codex rows usually means Codex CLI has not completed ChatGPT login or `~/.codex/auth.json` is unavailable.
 - Set `USAGE_STATUS_FIXTURE=demo` to test CLI/tray rendering without touching live providers.

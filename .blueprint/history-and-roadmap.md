@@ -10,7 +10,7 @@ Implemented:
 - fixture snapshots
 - cache with stale fallback
 - Claude OAuth usage provider
-- Codex app-server provider
+- Codex OAuth usage provider
 - CLI table, graph, and JSON output
 - tray menu, reusable WebView2 overlay, refresh skeleton, settings UI, refresh loop, runtime log, notification state
 - Rust CI workflow plus tag-driven GitHub release upload workflow
