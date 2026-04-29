@@ -11,6 +11,8 @@ use qmeter_core::types::{NormalizedSnapshot, ProviderId};
 #[cfg(windows)]
 use qmeter_providers::snapshot::collect_live_snapshot;
 #[cfg(windows)]
+use std::time::{Duration, Instant};
+#[cfg(windows)]
 use winit::application::ApplicationHandler;
 #[cfg(windows)]
 use winit::dpi::{LogicalPosition, LogicalSize};
@@ -64,6 +66,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         proxy,
         window: None,
         webview: None,
+        created_at: None,
+        focused_once: false,
     };
     event_loop.run_app(&mut app)?;
     Ok(())
@@ -89,6 +93,8 @@ struct PopupApp {
     proxy: EventLoopProxy<PopupEvent>,
     window: Option<Window>,
     webview: Option<WebView>,
+    created_at: Option<Instant>,
+    focused_once: bool,
 }
 
 #[cfg(windows)]
@@ -129,6 +135,7 @@ impl ApplicationHandler<PopupEvent> for PopupApp {
 
         self.webview = Some(webview);
         self.window = Some(window);
+        self.created_at = Some(Instant::now());
     }
 
     fn window_event(
@@ -138,7 +145,19 @@ impl ApplicationHandler<PopupEvent> for PopupApp {
         event: WindowEvent,
     ) {
         match event {
-            WindowEvent::CloseRequested | WindowEvent::Focused(false) => event_loop.exit(),
+            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::Focused(true) => {
+                self.focused_once = true;
+            }
+            WindowEvent::Focused(false) => {
+                let age = self
+                    .created_at
+                    .map(|time| time.elapsed())
+                    .unwrap_or_default();
+                if should_close_on_focus_loss(self.focused_once, age) {
+                    event_loop.exit();
+                }
+            }
             _ => {}
         }
     }
@@ -268,6 +287,11 @@ fn popup_position_for_screen(screen: PopupScreen, popup: PopupSize) -> PopupPoin
         x: (screen.x + screen.width - popup.width - 16.0).max(screen.x),
         y: (screen.y + screen.height - popup.height - 64.0).max(screen.y),
     }
+}
+
+#[cfg(windows)]
+fn should_close_on_focus_loss(focused_once: bool, age: Duration) -> bool {
+    focused_once && age >= Duration::from_millis(500)
 }
 
 #[cfg(windows)]
@@ -418,11 +442,12 @@ fn image_data_url(bytes: &[u8]) -> String {
 mod tests {
     use super::{
         PopupPoint, PopupScreen, PopupSize, estimate_window_height, popup_position_for_anchor,
-        popup_position_for_screen,
+        popup_position_for_screen, should_close_on_focus_loss,
     };
     use qmeter_core::types::{
         Confidence, NormalizedRow, NormalizedSnapshot, ProviderId, SourceKind,
     };
+    use std::time::Duration;
 
     #[test]
     fn popup_position_centers_window_above_anchor() {
@@ -458,6 +483,19 @@ mod tests {
 
         assert_eq!(pos.x, 1344.0);
         assert_eq!(pos.y, 376.0);
+    }
+
+    #[test]
+    fn popup_ignores_initial_focus_loss_before_window_is_ready() {
+        assert!(!should_close_on_focus_loss(
+            false,
+            Duration::from_millis(100)
+        ));
+    }
+
+    #[test]
+    fn popup_closes_after_real_focus_loss() {
+        assert!(should_close_on_focus_loss(true, Duration::from_millis(900)));
     }
 
     #[test]
