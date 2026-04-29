@@ -9,7 +9,6 @@ Runtime implementation lives in:
 - [`tray_app.rs`](../crates/qmeter-tray/src/tray_app.rs)
 - [`tray_state.rs`](../crates/qmeter-tray/src/tray_state.rs)
 - [`popup_main.rs`](../crates/qmeter-tray/src/popup_main.rs)
-- [`popup_model.rs`](../crates/qmeter-tray/src/popup_model.rs)
 - [`runtime_log.rs`](../crates/qmeter-tray/src/runtime_log.rs)
 - [`notification_store.rs`](../crates/qmeter-tray/src/notification_store.rs)
 
@@ -22,9 +21,9 @@ The tray creates a Windows tray icon and context menu with:
 - `Settings`
 - `Quit`
 
-The usage popup is a Rust-native `qmeter-popup.exe` GUI window launched as a sibling process by the tray. The tray passes the last tray click position so the popup opens above the tray area instead of centered on the screen. It renders normalized snapshot rows as provider cards with progress bars, reset timing, stale state, errors, and a manual refresh action.
+The usage popup is a Rust-native `qmeter-popup.exe` WebView2 overlay launched as a sibling process by the tray. The tray passes the last tray click position so the popup opens above the tray area instead of centered on the screen. It renders the legacy HTML/CSS provider cards with progress bars, reset timing, and a manual refresh action.
 
-The popup formats timestamps for local display as `YYYY-MM-DD HH:mm:ss`. If stale cache rows are available for a provider, transient provider errors for that same provider are hidden from the popup error section and reflected by the row stale state instead.
+The popup formats timestamps for local display as `YYYY-MM-DD HH:mm:ss`. The tray tracks the child popup process and kills/replaces it before opening another popup, so repeated tray clicks cannot accumulate orphan popup processes.
 
 Notification and simple settings summaries can still use native message dialogs. The primary usage surface should stay in `qmeter-popup.exe` so the tray event loop remains small and the GUI can own its own window loop.
 

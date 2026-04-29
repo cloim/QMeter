@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, path::Path};
+use std::{collections::BTreeMap, path::Path, process::Child};
 
 use crate::notification_store::{
     NotificationStoreConfig, load_notification_state, save_notification_state,
@@ -72,7 +72,7 @@ fn run_platform_tray(
 ) -> Result<(), Box<dyn std::error::Error>> {
     use std::time::{Duration, Instant};
     use tray_icon::{
-        Icon, MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent,
+        MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent,
         menu::{Menu, MenuEvent, MenuItem},
     };
     use winit::event::{Event, StartCause};
@@ -109,7 +109,7 @@ fn run_platform_tray(
     menu.append(&settings)?;
     menu.append(&quit)?;
 
-    let icon = Icon::from_rgba(vec![0, 0, 0, 0], 1, 1)?;
+    let icon = load_tray_icon()?;
     let _tray_icon = TrayIconBuilder::new()
         .with_tooltip("QMeter")
         .with_menu(Box::new(menu))
@@ -118,6 +118,7 @@ fn run_platform_tray(
 
     let mut last_refresh = Instant::now();
     let mut popup_anchor = None;
+    let mut popup_child = None;
     let refresh_interval = Duration::from_millis(state.settings.refresh_interval_ms.max(5_000));
 
     #[allow(deprecated)]
@@ -161,7 +162,7 @@ fn run_platform_tray(
                     if event.id == quit_id {
                         event_loop.exit();
                     } else if event.id == open_id {
-                        open_popup_window(&log_config, popup_anchor);
+                        open_popup_window(&log_config, popup_anchor, &mut popup_child, true);
                     } else if event.id == refresh_id {
                         match refresh_state(
                             &mut state,
@@ -182,7 +183,12 @@ fn run_platform_tray(
                                 }
                                 show_notification_events(&events);
                                 last_refresh = Instant::now();
-                                open_popup_window(&log_config, popup_anchor);
+                                open_popup_window(
+                                    &log_config,
+                                    popup_anchor,
+                                    &mut popup_child,
+                                    false,
+                                );
                             }
                             Err(err) => {
                                 let _ =
@@ -203,12 +209,22 @@ fn run_platform_tray(
                             button_state: MouseButtonState::Up,
                             position,
                             ..
-                        } => open_popup_window(&log_config, Some((position.x, position.y))),
+                        } => open_popup_window(
+                            &log_config,
+                            Some((position.x, position.y)),
+                            &mut popup_child,
+                            true,
+                        ),
                         TrayIconEvent::DoubleClick {
                             button: MouseButton::Left,
                             position,
                             ..
-                        } => open_popup_window(&log_config, Some((position.x, position.y))),
+                        } => open_popup_window(
+                            &log_config,
+                            Some((position.x, position.y)),
+                            &mut popup_child,
+                            true,
+                        ),
                         _ => {}
                     }
                 }
@@ -221,7 +237,32 @@ fn run_platform_tray(
 }
 
 #[cfg(windows)]
-fn open_popup_window(log_config: &RuntimeLogConfig, anchor: Option<(f64, f64)>) {
+fn open_popup_window(
+    log_config: &RuntimeLogConfig,
+    anchor: Option<(f64, f64)>,
+    popup_child: &mut Option<Child>,
+    toggle_existing: bool,
+) {
+    if let Some(child) = popup_child.as_mut() {
+        match child.try_wait() {
+            Ok(Some(_)) => {
+                *popup_child = None;
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                *popup_child = None;
+                if toggle_existing {
+                    return;
+                }
+            }
+            Err(err) => {
+                let _ = append_runtime_log(log_config, "popup-child-error", &err.to_string());
+                *popup_child = None;
+            }
+        }
+    }
+
     let popup_path = match std::env::current_exe() {
         Ok(current_exe) => popup_exe_path(&current_exe),
         Err(err) => {
@@ -237,12 +278,17 @@ fn open_popup_window(log_config: &RuntimeLogConfig, anchor: Option<(f64, f64)>) 
             .env("QMETER_POPUP_ANCHOR_Y", y.to_string());
     }
 
-    if let Err(err) = command.spawn() {
-        let _ = append_runtime_log(
-            log_config,
-            "popup-error",
-            &format!("{}: {err}", popup_path.display()),
-        );
+    match command.spawn() {
+        Ok(child) => {
+            *popup_child = Some(child);
+        }
+        Err(err) => {
+            let _ = append_runtime_log(
+                log_config,
+                "popup-error",
+                &format!("{}: {err}", popup_path.display()),
+            );
+        }
     }
 }
 
@@ -260,6 +306,16 @@ fn tray_event_position(event: &tray_icon::TrayIconEvent) -> Option<(f64, f64)> {
         | tray_icon::TrayIconEvent::Leave { position, .. } => Some((position.x, position.y)),
         _ => None,
     }
+}
+
+#[cfg(windows)]
+fn load_tray_icon() -> Result<tray_icon::Icon, Box<dyn std::error::Error>> {
+    const QMETER_PNG: &[u8] = include_bytes!("../../../resources/QMeter.png");
+    let image = image::load_from_memory(QMETER_PNG)?
+        .resize(32, 32, image::imageops::FilterType::Lanczos3)
+        .into_rgba8();
+    let (width, height) = image.dimensions();
+    Ok(tray_icon::Icon::from_rgba(image.into_raw(), width, height)?)
 }
 
 #[cfg(windows)]

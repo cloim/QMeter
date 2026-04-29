@@ -14,7 +14,9 @@ name = "qmeter-popup"
 path = "src/popup_main.rs"
 
 [dependencies]
+base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
 qmeter-core = { path = "../qmeter-core" }
 qmeter-providers = { path = "../qmeter-providers" }
 serde = { version = "1", features = ["derive"] }
@@ -22,10 +24,10 @@ serde_json = "1"
 thiserror = "2"
 
 [target.'cfg(windows)'.dependencies]
-eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow"] }
 rfd = "0.15"
 tray-icon = "0.21"
 windows = { version = "0.62", features = ["Win32_Foundation"] }
+wry = "0.55"
 winit = "0.30"
 
 [dev-dependencies]
