@@ -4,6 +4,10 @@
 
 QMeter는 Claude Code와 Codex 사용량, 초기화 시간, 캐시 상태, provider 부분 실패를 확인하는 Rust native Windows 트레이 앱 + CLI입니다.
 
+## 스크린샷
+
+![QMeter 트레이 오버레이](./Screenshot.png)
+
 ## 주요 기능
 
 - Claude/Codex 사용량 통합 조회

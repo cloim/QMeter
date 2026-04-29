@@ -4,6 +4,10 @@ English | [한국어](./README.ko.md)
 
 QMeter is a Rust-native Windows tray app and CLI for checking Claude Code and Codex usage, reset timing, cache state, and partial provider failures.
 
+## Screenshot
+
+![QMeter tray overlay](./Screenshot.png)
+
 ## Features
 
 - Unified Claude/Codex usage snapshot
