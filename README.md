@@ -26,6 +26,9 @@ QMeter is a Rust-native Windows tray app and CLI for checking Claude Code and Co
 
 ## Build And Run
 
+Release binaries are named `qmeter.exe` for the CLI and `qmeter-tray.exe` for the tray app.
+The Cargo package for the CLI is still named `qmeter-cli`, so development commands use `-p qmeter-cli`.
+
 ```powershell
 cargo test --workspace
 cargo run -p qmeter-cli -- --json
@@ -46,6 +49,14 @@ cargo run -p qmeter-cli -- --view graph
 ```
 
 ## CLI
+
+Installed or release binary:
+
+```powershell
+qmeter.exe --json --providers claude,codex --refresh --debug
+```
+
+Development run from source:
 
 ```powershell
 cargo run -p qmeter-cli -- --json --providers claude,codex --refresh --debug

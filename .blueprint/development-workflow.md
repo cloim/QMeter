@@ -10,6 +10,8 @@ cargo test --workspace --locked
 
 Run CLI:
 
+The release CLI binary is `qmeter.exe`. The Cargo package is `qmeter-cli`, so source runs use `-p qmeter-cli`.
+
 ```powershell
 cargo run -p qmeter-cli -- --json
 cargo run -p qmeter-cli -- --view table
