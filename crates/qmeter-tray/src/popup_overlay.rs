@@ -434,7 +434,7 @@ fn render_popup_html(snapshot: &NormalizedSnapshot, settings: &TraySettings) -> 
 </style></head>
 <body><div class="panel">
   <div class="header">
-    <div><div class="title"><img class="titleLogo" src="{qmeter_logo}" alt="" />QMeter <span style="font-size:12px;color:#9ca3af;font-weight:700">v0.1.9</span></div>
+    <div><div class="title"><img class="titleLogo" src="{qmeter_logo}" alt="" />QMeter <span style="font-size:12px;color:#9ca3af;font-weight:700">v0.1.10</span></div>
     <div class="sub">마지막 확인: <span class="mono" id="lastChecked">-</span></div></div>
     <div class="btnRow">
       <button class="btn secondary" id="openSettings" title="환경설정">⚙</button>
