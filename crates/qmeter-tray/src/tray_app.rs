@@ -113,6 +113,7 @@ fn run_platform_tray(
     let _tray_icon = TrayIconBuilder::new()
         .with_tooltip("QMeter")
         .with_menu(Box::new(menu))
+        .with_menu_on_left_click(false)
         .with_icon(icon)
         .build()?;
 
